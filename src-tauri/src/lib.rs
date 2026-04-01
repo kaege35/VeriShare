@@ -55,6 +55,16 @@ async fn open_file_dialog(app: AppHandle, peer_ip: String) -> Result<(), String>
     Ok(())
 }
 
+#[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+    use tauri_plugin_updater::UpdaterExt;
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    if let Some(update) = updater.check().await.map_err(|e| e.to_string())? {
+        update.download_and_install(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -62,7 +72,8 @@ pub fn run() {
             start_discovery, 
             open_file_dialog,
             send_paths_directly,
-            respond_to_transfer
+            respond_to_transfer,
+            install_update
         ])
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -100,10 +111,31 @@ pub fn run() {
                 })
                 .build(app)?;
 
+            // TCP Transfer Sunucusunu başlat
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = transfer::start_transfer_server(handle).await {
-                    println!("Transfer server failed: {}", e);
+                    println!("Transfer server başlatılamadı: {}", e);
+                }
+            });
+
+            // Açılışta arka planda otomatik güncelleme kontrolü
+            let updater_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                use tauri_plugin_updater::UpdaterExt;
+                match updater_handle.updater() {
+                    Ok(updater) => {
+                        match updater.check().await {
+                            Ok(Some(update)) => {
+                                let version = update.version.clone();
+                                let _ = updater_handle.emit("update-available", version);
+                            }
+                            Ok(None) => { println!("Uygulama güncel."); }
+                            Err(e) => { println!("Güncelleme kontrol hatası: {}", e); }
+                        }
+                    }
+                    Err(e) => { println!("Updater başlatılamadı: {}", e); }
                 }
             });
             Ok(())
@@ -115,10 +147,7 @@ pub fn run() {
             }
             _ => {}
         })
-        .invoke_handler(tauri::generate_handler![
-            start_discovery,
-            open_file_dialog
-        ])
+        // Duplicate invoke_handler kaldırıldı (üstte tanımlandı)
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

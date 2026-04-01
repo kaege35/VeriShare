@@ -73,10 +73,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Mock Tauri Listeners (Arkadan gelecek veriler)
+  // Ağ cihazları güncelleme listener'ı
   listen('peers-updated', (event) => {
     updateUserList(event.payload);
-    updateUserList(event.payload);
+  });
+
+  // Otomatik güncelleme bildirimi
+  listen('update-available', (event) => {
+    const version = event.payload;
+    showUpdateBanner(version);
   });
 });
 
@@ -88,6 +93,27 @@ async function notifyOS(title, body) {
   }
   if (permissionGranted) sendNotification({ title, body });
 }
+
+function showUpdateBanner(version) {
+  // Varsa önce eski banner'ı kaldır
+  const existing = document.getElementById('update-banner');
+  if (existing) existing.remove();
+
+  const banner = document.createElement('div');
+  banner.id = 'update-banner';
+  banner.innerHTML = `
+    <span>🚀 <strong>EasyShare v${version}</strong> mevcut!</span>
+    <button onclick="doUpdate()">Hemen Güncelle</button>
+    <button onclick="this.parentElement.remove()" style="background:transparent;border:none;color:inherit;cursor:pointer;margin-left:4px;font-size:16px;">✕</button>
+  `;
+  document.body.appendChild(banner);
+}
+
+window.doUpdate = async () => {
+  const { relaunch } = window.__TAURI__.process;
+  await invoke('install_update');
+  await relaunch();
+};
 
 let currentTransferId = null;
 
