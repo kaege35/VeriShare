@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EasyShare</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="main.js" defer></script>
+</head>
+
+<body>
+
+  <div id="login-screen">
+    <div class="login-card">
+      <div class="login-logo">Easy<span>Share</span></div>
+      <div class="login-sub">Kurumsal Ağ Transfer Platformu</div>
+      <label class="login-label">Kullanıcı Adı</label>
+      <input class="login-input" id="name-input" type="text" placeholder="Adınızı giriniz" maxlength="24" autofocus>
+      <button class="login-btn" id="join-btn">Oturum Aç</button>
+    </div>
+  </div>
+
+  <div id="app">
+    <header class="header">
+      <div class="header-logo" data-tauri-drag-region>Easy<span>Share</span></div>
+      <div class="header-meta">
+        <div class="status-dot">
+          <div class="dot"></div><span>YEREL AĞ BAĞLI</span>
+        </div>
+        <div class="my-name" id="header-name"></div>
+      </div>
+    </header>
+
+    <div class="main">
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <span>Ağdaki Cihazlar</span>
+          <span class="online-count" id="online-count">0</span>
+        </div>
+        <div class="user-list" id="user-list"></div>
+      </aside>
+
+      <div class="content">
+        <div class="drop-area" id="drop-area">
+          <div id="no-target" class="no-target-msg">
+            <p>Hedef Cihaz Seçiniz</p>
+            <span class="sub-text">Aktarım yapmak için sol menüden bir bağlantı noktası belirleyin.</span>
+          </div>
+
+          <div id="drop-target-ui" style="display:none; flex-direction:column; align-items:center; width:100%;">
+            <div class="drop-frame" id="drop-frame">
+              <div class="drop-icon">📁</div>
+              <div class="drop-target-name" id="drop-target-name"></div>
+              <div class="drop-hint">Aktarılacak dosyaları veya klasörleri bu alana sürükleyiniz</div>
+              <button class="browse-btn" id="browse-btn">Gözat</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="transfer-log">
+          <div class="log-header">İşlem Geçmişi</div>
+          <div id="log-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gelen Dosya Modal -->
+  <div class="modal-overlay" id="incoming-modal">
+    <div class="modal">
+      <div class="modal-title">📥 Gelen İstek</div>
+      <div class="modal-file" id="modal-file-name"></div>
+      <div class="modal-size" id="modal-file-meta"></div>
+      <div class="modal-actions">
+        <button class="modal-btn accept" id="accept-btn">Kabul Et</button>
+        <button class="modal-btn decline" id="decline-btn">Reddet</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toast-container"></div>
+
+</body>
+
+</html>

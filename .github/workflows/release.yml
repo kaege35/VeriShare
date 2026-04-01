@@ -1,0 +1,42 @@
+name: EasyShare Multi-Platform Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Sadece v ile başlayan tagler atıldığında çalışır (v1.0.0 vb.)
+  workflow_dispatch: # Manuel olarak GitHub sitesinden başlatabilmek için
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        # Hem Mac hem Windows sunucularını aynı anda ayağa kaldırıyoruz
+        platform: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.platform }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Kurulum - Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Kurulum - Bagimliliklar (NPM)
+        run: npm install
+
+      - name: Kurulum - Rust Araclari
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Yayinla - Tauri App (.exe ve .dmg olusturucu)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'EasyShare v__VERSION__'
+          releaseBody: 'Sistemsel guncellemeler ve EasyShare Windows lansmani!'
+          releaseDraft: true
+          prerelease: false
