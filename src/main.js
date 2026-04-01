@@ -18,53 +18,98 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   const dropArea = document.getElementById('drop-area');
-  dropArea.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    if (selectedUser) dropArea.classList.add('dragging');
-  });
+  
+  // Sadece CSS animasyonlari icin native window
+  listen('tauri://drag-enter', () => { if (selectedUser) dropArea.classList.add('dragging'); });
+  listen('tauri://drag-leave', () => dropArea.classList.remove('dragging'));
 
-  dropArea.addEventListener('dragleave', () => dropArea.classList.remove('dragging'));
-
-  dropArea.addEventListener('drop', async (e) => {
-    e.preventDefault();
+  listen('tauri://drop', async (e) => {
     dropArea.classList.remove('dragging');
     if (!selectedUser) { toast('Önce bir kişi seç', 'error'); return; }
+    if (!selectedUser.ip) { toast('Ağ adresi yok', 'error'); return; }
     
-    // Klasör veya dosya aktarımı için Tauri API kullanılacak
-    invoke('select_dropped_items', { 
-      peer: selectedUser.id 
-      // Daha sonra Native API ile implement edilecek
-    });
+    const paths = e.payload.paths; // Tauri native full path array
+    if (!paths || paths.length === 0) return;
+    
+    // Rust arka ucuna direkt gönder
+    invoke('send_paths_directly', { peerIp: selectedUser.ip, paths });
   });
 
   document.getElementById('browse-btn').addEventListener('click', () => {
     if (!selectedUser) { toast('Önce bir kişi seç', 'error'); return; }
-    if (!selectedUser.ip) { toast('Kişinin ağ adresi henüz algılanmadı', 'error'); return; }
+    if (!selectedUser.ip) { toast('Ağ adresi yok', 'error'); return; }
     invoke('open_file_dialog', { peerIp: selectedUser.ip });
+  });
+
+  // Gelen onay istekleri için dinleyici
+  listen('transfer-request', (event) => {
+    const p = event.payload;
+    showModal(p.id, p.total_files, p.total_size);
+  });
+
+  // Anlık Yüzde Barları için progress dinleyici
+  listen('transfer-progress', (event) => {
+    const { id, pct, text, is_done } = event.payload;
+    if (pct === 0 && text) {
+      addLog(id, text, 'in', 'Başlıyor...');
+    } else if (is_done) {
+      updateLog(id, 'Tamamlandı', 'done', 100);
+      toast(text || 'Transfer bitti!', 'success');
+      notifyOS('EasyShare İndirmesi', text || 'Dosyalar başarıyla indirildi.');
+    } else {
+      updateLog(id, `%${pct}`, '', pct);
+    }
+  });
+
+  listen('transfer-out-progress', (event) => {
+    const { id, pct, text, is_done } = event.payload;
+    if (pct === 0 && text) {
+      addLog(id, text, 'out', 'Gönderiliyor...');
+    } else if (is_done) {
+      updateLog(id, 'İletildi', 'success', 100);
+      toast(text || 'Gönderim tamamlandı!', 'success');
+    } else {
+      updateLog(id, `%${pct}`, '', pct);
+    }
   });
 
   // Mock Tauri Listeners (Arkadan gelecek veriler)
   listen('peers-updated', (event) => {
     updateUserList(event.payload);
+    updateUserList(event.payload);
+  });
+});
+
+async function notifyOS(title, body) {
+  let permissionGranted = await isPermissionGranted();
+  if (!permissionGranted) {
+    const permission = await requestPermission();
+    permissionGranted = permission === 'granted';
+  }
+  if (permissionGranted) sendNotification({ title, body });
+}
+
+let currentTransferId = null;
+
+function showModal(transferId, count, size) {
+  currentTransferId = transferId;
+  const overlay = document.getElementById('incoming-modal');
+  document.getElementById('modal-file-name').textContent = `${count} adet dosya/klasör`;
+  document.getElementById('modal-file-meta').textContent = formatSize(size);
+  overlay.classList.add('visible');
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const acceptBtn = document.getElementById('accept-btn');
+  if(acceptBtn) acceptBtn.addEventListener('click', () => {
+    document.getElementById('incoming-modal').classList.remove('visible');
+    if (currentTransferId) invoke('respond_to_transfer', { id: currentTransferId, accept: true });
   });
 
-  listen('transfer-event', async (event) => {
-    toast(event.payload, 'success');
-  
-    // Bildirim yetkisini kontrol et
-    let permissionGranted = await isPermissionGranted();
-    if (!permissionGranted) {
-      const permission = await requestPermission();
-      permissionGranted = permission === 'granted';
-    }
-  
-    // Gelen dosyalarda bildirim at
-    if (permissionGranted) {
-      sendNotification({
-        title: 'EasyShare Aktarımı',
-        body: event.payload
-      });
-    }
+  const declineBtn = document.getElementById('decline-btn');
+  if(declineBtn) declineBtn.addEventListener('click', () => {
+    document.getElementById('incoming-modal').classList.remove('visible');
+    if (currentTransferId) invoke('respond_to_transfer', { id: currentTransferId, accept: false });
   });
 });
 

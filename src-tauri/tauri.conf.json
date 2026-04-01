@@ -24,9 +24,9 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://sizin-sunucunuz.com/update.json"
+        "https://github.com/kaege35/EasyShare/releases/latest/download/latest.json"
       ],
-      "pubkey": "BURAYA_TARIH_ONCESI_ACIK_ANAHTAR_GELECEK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUyRDNDN0M1MTdBOEU4OTgKUldTWTZLZ1h4Y2ZUVWxIQzZvUUwzaEcxZVRBMFNrV1RuT3ZzUjRVR1lXOERNMTJBRURRbUtadnYK"
     }
   },
   "bundle": {

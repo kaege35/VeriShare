@@ -19,16 +19,34 @@ async fn start_discovery(app: AppHandle, name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn send_paths_directly(app: AppHandle, peer_ip: String, paths: Vec<String>) -> Result<(), String> {
+    let pbs: Vec<std::path::PathBuf> = paths.into_iter().map(std::path::PathBuf::from).collect();
+    let app_c = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = transfer::send_items(&peer_ip, pbs, app_c.clone()).await {
+            let _ = app_c.emit("transfer-event", format!("Hata: {}", e));
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
+async fn respond_to_transfer(id: String, accept: bool) -> Result<(), String> {
+    if let Some(tx) = transfer::PENDING_TRANSFERS.lock().await.remove(&id) {
+        let _ = tx.send(accept);
+    }
+    Ok(())
+}
+
+#[tauri::command]
 async fn open_file_dialog(app: AppHandle, peer_ip: String) -> Result<(), String> {
     use tauri_plugin_dialog::DialogExt;
     app.dialog().file().pick_files(move |file_paths| {
         if let Some(paths) = file_paths {
             let pbs: Vec<std::path::PathBuf> = paths.into_iter().map(|p| p.into_path().unwrap()).collect();
             let app_c = app.clone();
-            
             tauri::async_runtime::spawn(async move {
-                let _ = app_c.emit("transfer-event", format!("{} öğe gönderiliyor...", pbs.len()));
-                if let Err(e) = transfer::send_items(&peer_ip, pbs).await {
+                if let Err(e) = transfer::send_items(&peer_ip, pbs, app_c.clone()).await {
                     let _ = app_c.emit("transfer-event", format!("Hata: {}", e));
                 }
             });
@@ -40,6 +58,12 @@ async fn open_file_dialog(app: AppHandle, peer_ip: String) -> Result<(), String>
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![
+            start_discovery, 
+            open_file_dialog,
+            send_paths_directly,
+            respond_to_transfer
+        ])
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())

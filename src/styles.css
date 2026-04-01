@@ -402,7 +402,8 @@ body::after {
 
 .drop-area.dragging .drop-frame {
   border-color: var(--accent);
-  background: rgba(0, 229, 255, 0.03);
+  background: rgba(229, 57, 53, 0.04);
+  transform: scale(1.02);
 }
 
 .no-target-msg {
@@ -427,17 +428,21 @@ body::after {
   max-width: 560px;
   aspect-ratio: 16/9;
   border: 1.5px dashed var(--border);
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
   position: relative;
   cursor: pointer;
 }
 
 .drop-frame:hover {
   border-color: var(--accent);
+  box-shadow: 0 8px 24px rgba(229, 57, 53, 0.08);
 }
 
 .drop-frame .corner {
@@ -501,20 +506,24 @@ body::after {
 }
 
 .browse-btn {
-  padding: 10px 28px;
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text);
+  padding: 12px 36px;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
   font-family: 'Inter', sans-serif;
-  font-size: 11px;
+  font-size: 13px;
+  font-weight: 500;
   letter-spacing: 1px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(229, 57, 53, 0.2);
 }
 
 .browse-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--accent2);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(229, 57, 53, 0.3);
 }
 
 /* TRANSFER LOG */
@@ -639,8 +648,16 @@ body::after {
   width: 420px;
   background: var(--surface);
   border: 1px solid var(--border);
+  border-radius: 12px;
   padding: 36px;
   position: relative;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.15);
+  animation: modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 .modal::before {
@@ -682,6 +699,7 @@ body::after {
 .modal-btn {
   padding: 14px;
   border: none;
+  border-radius: 6px;
   font-family: 'Inter', sans-serif;
   font-size: 12px;
   font-weight: 700;
@@ -693,7 +711,7 @@ body::after {
 
 .modal-btn.accept {
   background: var(--accent);
-  color: var(--bg);
+  color: #fff;
 }
 
 .modal-btn.accept:hover {
