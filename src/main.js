@@ -45,6 +45,23 @@ document.addEventListener("DOMContentLoaded", () => {
   listen('transfer-request', (event) => {
     const p = event.payload;
     showModal(p.id, p.total_files, p.total_size);
+    notifyOS('EasyShare: Gelen İstek', `${p.total_files} adet dosya gönderilmek isteniyor.`);
+  });
+
+  // Genel hata ve durum bildirimleri (Örn: Reddetme)
+  listen('transfer-event', (event) => {
+    const msg = event.payload;
+    if (msg.includes("ERİŞİM_REDDEDİLDİ")) {
+      // En son out log'unu bul ve "Reddedildi" olarak işaretle
+      for (let peerId in logItems) {
+        if (logItems[peerId].startsWith('log-out-')) { // Bu mantık geliştirilebilir ama şimdilik yeterli
+           updateLog(peerId, 'Reddedildi', 'error', 0);
+        }
+      }
+      toast('Karşı taraf aktarımı reddetti', 'error');
+    } else {
+      toast(msg, 'error');
+    }
   });
 
   // Anlık Yüzde Barları için progress dinleyici
@@ -238,7 +255,11 @@ function updateLog(peerId, statusText, statusClass, pct) {
   if (!el) return;
   const status = el.querySelector('.log-status');
   const fill = el.querySelector('.log-progress-fill');
-  if (status) { status.textContent = statusText; status.className = `log-status ${statusClass || ''}`; }
+  if (status) { 
+    status.textContent = statusText; 
+    status.className = `log-status ${statusClass || ''}`; 
+  }
+  if (statusClass) el.classList.add(statusClass);
   if (fill && pct !== undefined) fill.style.width = pct + '%';
 }
 

@@ -620,8 +620,16 @@ body::after {
   color: var(--success);
 }
 
+.log-status.error {
+  color: var(--danger);
+}
+
 .log-status.fail {
   color: var(--danger);
+}
+
+.log-item.error .log-progress-fill {
+  background: var(--danger);
 }
 
 /* MODAL */
