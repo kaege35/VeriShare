@@ -102,7 +102,7 @@ async fn handle_connection(mut socket: TcpStream, app: AppHandle) -> Result<(), 
                 }));
 
                 let mut file = tokio::fs::File::create(&save_path).await?;
-                let mut buffer = [0u8; 1024 * 1024]; // 1MB Chunk (Performans için artırıldı)
+                let mut buffer = vec![0u8; 1024 * 1024]; // 1MB Chunk Heap'te (Stack Overflow önlemi)
                 let mut remaining = file_size;
                 let mut downloaded = 0u64;
                 let mut last_pct = 0;
@@ -208,7 +208,7 @@ pub async fn send_items(peer_ip: &str, paths: Vec<PathBuf>, app: AppHandle) -> R
         socket.write_all(&req_json).await?;
         
         let mut file = tokio::fs::File::open(&abs_path).await?;
-        let mut buffer = [0u8; 1024 * 1024]; // 1MB Chunk (Hızlı gönderim)
+        let mut buffer = vec![0u8; 1024 * 1024]; // 1MB Chunk Heap'te (Stack Overflow önlemi)
         let mut uploaded = 0u64;
         let mut last_pct = 0;
 
