@@ -3,9 +3,12 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 use walkdir::WalkDir;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use std::collections::HashMap;
 
 pub const TRANSFER_PORT: u16 = 53318;
 
@@ -26,7 +29,41 @@ pub enum TransferProtocol {
 }
 
 lazy_static::lazy_static! {
-    pub static ref PENDING_TRANSFERS: std::sync::Arc<tokio::sync::Mutex<std::collections::HashMap<String, tokio::sync::oneshot::Sender<bool>>>> = std::sync::Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
+    pub static ref PENDING_TRANSFERS: Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<bool>>>> = Arc::new(Mutex::new(HashMap::new()));
+    /// İptal token'ları — her transfer ID'si için bir bayrak
+    pub static ref CANCEL_TOKENS: Arc<Mutex<HashMap<String, Arc<tokio::sync::Notify>>>> = Arc::new(Mutex::new(HashMap::new()));
+}
+
+/// Frontend'den çağrılacak iptal komutu
+pub async fn cancel_transfer_by_id(id: String) -> Result<(), String> {
+    // Eğer pending (onay bekleyen) bir transfer ise reddet
+    if let Some(tx) = PENDING_TRANSFERS.lock().await.remove(&id) {
+        let _ = tx.send(false);
+    }
+    // Aktif transfer ise iptal sinyali gönder
+    if let Some(notify) = CANCEL_TOKENS.lock().await.remove(&id) {
+        notify.notify_one();
+    }
+    Ok(())
+}
+
+fn register_cancel_token(id: &str) -> Arc<tokio::sync::Notify> {
+    let notify = Arc::new(tokio::sync::Notify::new());
+    let rt = tokio::runtime::Handle::current();
+    let id_owned = id.to_string();
+    let notify_clone = notify.clone();
+    rt.spawn(async move {
+        CANCEL_TOKENS.lock().await.insert(id_owned, notify_clone);
+    });
+    notify
+}
+
+fn remove_cancel_token(id: &str) {
+    let rt = tokio::runtime::Handle::current();
+    let id_owned = id.to_string();
+    rt.spawn(async move {
+        CANCEL_TOKENS.lock().await.remove(&id_owned);
+    });
 }
 
 pub async fn start_transfer_server(app: AppHandle) -> Result<(), Box<dyn std::error::Error>> {
@@ -49,6 +86,7 @@ pub async fn start_transfer_server(app: AppHandle) -> Result<(), Box<dyn std::er
 
 async fn handle_connection(mut socket: TcpStream, app: AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let save_dir = dirs::download_dir().unwrap_or_else(|| std::env::current_dir().unwrap());
+    let mut active_cancel: Option<Arc<tokio::sync::Notify>> = None;
 
     loop {
         let mut len_buf = [0u8; 4];
@@ -64,9 +102,27 @@ async fn handle_connection(mut socket: TcpStream, app: AppHandle) -> Result<(), 
         
         match req {
             TransferProtocol::TransferRequest { total_size, total_files, id } => {
+                // İptal token'ı kaydet
+                let cancel = register_cancel_token(&id);
+                active_cancel = Some(cancel);
+
                 let (tx, rx) = tokio::sync::oneshot::channel();
                 PENDING_TRANSFERS.lock().await.insert(id.clone(), tx);
                 
+                // Uygulama penceresini öne getir (arka plandaysa)
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+
+                // Native tray bildirimi gönder
+                let _ = app.notification()
+                    .builder()
+                    .title("EasyShare — Gelen İstek")
+                    .body(format!("{} dosya ({}) göndermek istiyor. Kabul ediyor musunuz?", total_files, format_size_rust(total_size)))
+                    .show();
+
                 let _ = app.emit("transfer-request", serde_json::json!({
                     "id": id,
                     "total_size": total_size,
@@ -79,7 +135,10 @@ async fn handle_connection(mut socket: TcpStream, app: AppHandle) -> Result<(), 
                 socket.write_all(&(req_json.len() as u32).to_be_bytes()).await?;
                 socket.write_all(&req_json).await?;
                 
-                if !accepted { return Ok(()); }
+                if !accepted {
+                    if let Some(ref _c) = active_cancel { remove_cancel_token(&id); }
+                    return Ok(());
+                }
             },
             TransferProtocol::TransferAccepted => {},
             TransferProtocol::TransferDeclined => {},
@@ -102,14 +161,32 @@ async fn handle_connection(mut socket: TcpStream, app: AppHandle) -> Result<(), 
                 }));
 
                 let mut file = tokio::fs::File::create(&save_path).await?;
-                let mut buffer = vec![0u8; 1024 * 1024]; // 1MB Chunk Heap'te (Stack Overflow önlemi)
+                let mut buffer = vec![0u8; 1024 * 1024];
                 let mut remaining = file_size;
                 let mut downloaded = 0u64;
                 let mut last_pct = 0;
+                let mut cancelled = false;
                 
                 while remaining > 0 {
                     let to_read = std::cmp::min(remaining, buffer.len() as u64) as usize;
-                    socket.read_exact(&mut buffer[..to_read]).await?;
+                    
+                    // İptal kontrolü ile birlikte oku
+                    if let Some(ref cancel) = active_cancel {
+                        tokio::select! {
+                            result = socket.read_exact(&mut buffer[..to_read]) => {
+                                result?;
+                            }
+                            _ = cancel.notified() => {
+                                cancelled = true;
+                                break;
+                            }
+                        }
+                    } else {
+                        socket.read_exact(&mut buffer[..to_read]).await?;
+                    }
+                    
+                    if cancelled { break; }
+                    
                     file.write_all(&buffer[..to_read]).await?;
                     remaining -= to_read as u64;
                     downloaded += to_read as u64;
@@ -126,6 +203,19 @@ async fn handle_connection(mut socket: TcpStream, app: AppHandle) -> Result<(), 
                     }
                 }
 
+                if cancelled {
+                    let _ = app.emit("transfer-progress", serde_json::json!({
+                        "id": id.clone(),
+                        "pct": last_pct,
+                        "text": rel_path.clone(),
+                        "is_done": false,
+                        "cancelled": true
+                    }));
+                    // Yarım kalan dosyayı sil
+                    let _ = tokio::fs::remove_file(&save_path).await;
+                    return Ok(());
+                }
+
                 // Native bildirim gönder (macOS + Windows)
                 let _ = app.notification()
                     .builder()
@@ -134,6 +224,9 @@ async fn handle_connection(mut socket: TcpStream, app: AppHandle) -> Result<(), 
                     .show();
             },
             TransferProtocol::AllDone => {
+                if let Some(ref _c) = active_cancel {
+                    // Temizle
+                }
                 break;
             }
         }
@@ -169,17 +262,30 @@ pub async fn send_items(peer_ip: &str, paths: Vec<PathBuf>, app: AppHandle) -> R
         }
     }
 
+    let transfer_id = uuid::Uuid::new_v4().to_string();
+    let cancel = register_cancel_token(&transfer_id);
+
     let req = TransferProtocol::TransferRequest {
         total_size,
         total_files: all_files.len() as u32,
-        id: uuid::Uuid::new_v4().to_string(),
+        id: transfer_id.clone(),
     };
     let req_json = serde_json::to_vec(&req)?;
     socket.write_all(&(req_json.len() as u32).to_be_bytes()).await?;
     socket.write_all(&req_json).await?;
     
+    // Yanıt beklerken iptal kontrolü
     let mut len_buf = [0u8; 4];
-    socket.read_exact(&mut len_buf).await?;
+    tokio::select! {
+        result = socket.read_exact(&mut len_buf) => {
+            result?;
+        }
+        _ = cancel.notified() => {
+            remove_cancel_token(&transfer_id);
+            return Err("İPTAL_EDİLDİ".into());
+        }
+    }
+
     let len = u32::from_be_bytes(len_buf) as usize;
     let mut payload = vec![0u8; len];
     socket.read_exact(&mut payload).await?;
@@ -187,9 +293,20 @@ pub async fn send_items(peer_ip: &str, paths: Vec<PathBuf>, app: AppHandle) -> R
     
     match resp {
         TransferProtocol::TransferAccepted => {},
-        TransferProtocol::TransferDeclined => return Err("ERİŞİM_REDDEDİLDİ".into()),
-        _ => return Err("Bilinmeyen yanıt.".into()),
+        TransferProtocol::TransferDeclined => {
+            remove_cancel_token(&transfer_id);
+            return Err("ERİŞİM_REDDEDİLDİ".into());
+        },
+        _ => {
+            remove_cancel_token(&transfer_id);
+            return Err("Bilinmeyen yanıt.".into());
+        },
     }
+
+    // Frontend'e transfer ID'sini bildir
+    let _ = app.emit("transfer-id-assigned", serde_json::json!({
+        "transfer_id": transfer_id.clone()
+    }));
 
     for (rel_path, abs_path) in all_files {
         let size = tokio::fs::metadata(&abs_path).await?.len();
@@ -208,12 +325,29 @@ pub async fn send_items(peer_ip: &str, paths: Vec<PathBuf>, app: AppHandle) -> R
         socket.write_all(&req_json).await?;
         
         let mut file = tokio::fs::File::open(&abs_path).await?;
-        let mut buffer = vec![0u8; 1024 * 1024]; // 1MB Chunk Heap'te (Stack Overflow önlemi)
+        let mut buffer = vec![0u8; 1024 * 1024];
         let mut uploaded = 0u64;
         let mut last_pct = 0;
 
         loop {
-            let n = file.read(&mut buffer).await?;
+            // İptal kontrolü
+            let n;
+            tokio::select! {
+                result = file.read(&mut buffer) => {
+                    n = result?;
+                }
+                _ = cancel.notified() => {
+                    remove_cancel_token(&transfer_id);
+                    let _ = app.emit("transfer-out-progress", serde_json::json!({
+                        "id": id.clone(),
+                        "pct": last_pct,
+                        "text": rel_path.clone(),
+                        "is_done": false,
+                        "cancelled": true
+                    }));
+                    return Err("İPTAL_EDİLDİ".into());
+                }
+            }
             if n == 0 { break; }
             socket.write_all(&buffer[..n]).await?;
             uploaded += n as u64;
@@ -235,6 +369,14 @@ pub async fn send_items(peer_ip: &str, paths: Vec<PathBuf>, app: AppHandle) -> R
     socket.write_all(&(end_json.len() as u32).to_be_bytes()).await?;
     socket.write_all(&end_json).await?;
 
+    remove_cancel_token(&transfer_id);
     Ok(())
 }
 
+/// Rust tarafında boyut formatlama (bildirimler için)
+fn format_size_rust(bytes: u64) -> String {
+    if bytes < 1024 { return format!("{} B", bytes); }
+    if bytes < 1024 * 1024 { return format!("{:.1} KB", bytes as f64 / 1024.0); }
+    if bytes < 1024 * 1024 * 1024 { return format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0)); }
+    format!("{:.2} GB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+}

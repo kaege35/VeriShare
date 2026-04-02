@@ -8,6 +8,7 @@ let selectedUser = null;
 let pendingTransfer = null; 
 let logItems = {};
 let logCount = 0;
+let activeTransferId = null; // Gönderim transfer ID'si
 
 // ─── INIT ─────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
@@ -81,14 +82,26 @@ document.addEventListener("DOMContentLoaded", () => {
     const msg = event.payload;
     if (msg.includes("ERİŞİM_REDDEDİLDİ")) {
       toast('Karşı taraf aktarımı reddetti', 'error');
+    } else if (msg.includes("iptal")) {
+      toast(msg, 'info');
     } else {
       toast(msg, 'error');
     }
   });
 
+  // Backend'den gelen transfer ID eşleştirmesi
+  listen('transfer-id-assigned', (event) => {
+    activeTransferId = event.payload.transfer_id;
+  });
+
   // Gelen dosya ilerleme
   listen('transfer-progress', (event) => {
-    const { id, pct, text, is_done } = event.payload;
+    const { id, pct, text, is_done, cancelled } = event.payload;
+    if (cancelled) {
+      updateLog(id, 'İptal Edildi', 'cancelled', pct);
+      toast('Transfer iptal edildi', 'info');
+      return;
+    }
     if (pct === 0 && text) {
       addLog(id, text, 'in', 'Başlıyor...');
     } else if (is_done) {
@@ -101,7 +114,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Giden dosya ilerleme
   listen('transfer-out-progress', (event) => {
-    const { id, pct, text, is_done } = event.payload;
+    const { id, pct, text, is_done, cancelled } = event.payload;
+    if (cancelled) {
+      updateLog(id, 'İptal Edildi', 'cancelled', pct);
+      toast('Gönderim iptal edildi', 'info');
+      return;
+    }
     if (pct === 0 && text) {
       addLog(id, text, 'out', 'Gönderiliyor...');
     } else if (is_done) {
@@ -275,11 +293,13 @@ function addLog(peerId, fileName, direction, statusText) {
   const el = document.createElement('div');
   el.className = 'log-item';
   el.id = id;
+  el.dataset.transferId = peerId;
   el.innerHTML = `
     <div class="log-icon ${dirClass}">${dirIcon}</div>
     <div class="log-text"><strong>${fileName}</strong></div>
     <div class="log-progress"><div class="log-progress-fill" style="width:0%"></div></div>
     <div class="log-status">${statusText}</div>
+    <button class="log-cancel-btn" title="İptal Et" onclick="cancelTransfer('${peerId}')">✕</button>
   `;
   list.prepend(el);
   list.scrollTop = 0;
@@ -292,13 +312,29 @@ function updateLog(peerId, statusText, statusClass, pct) {
   if (!el) return;
   const status = el.querySelector('.log-status');
   const fill = el.querySelector('.log-progress-fill');
+  const cancelBtn = el.querySelector('.log-cancel-btn');
   if (status) { 
     status.textContent = statusText; 
     status.className = `log-status ${statusClass || ''}`; 
   }
   if (statusClass) el.classList.add(statusClass);
   if (fill && pct !== undefined) fill.style.width = pct + '%';
+  // Tamamlandı, iptal edildi veya hata durumunda iptal butonunu gizle
+  if (statusClass === 'done' || statusClass === 'success' || statusClass === 'cancelled' || statusClass === 'error') {
+    if (cancelBtn) cancelBtn.style.display = 'none';
+  }
 }
+
+// İptal fonksiyonu (global scope — HTML onclick'ten erişilebilmesi için)
+window.cancelTransfer = async (transferId) => {
+  try {
+    await invoke('cancel_transfer', { id: transferId });
+    updateLog(transferId, 'İptal Edildi', 'cancelled', undefined);
+    toast('Transfer iptal edildi', 'info');
+  } catch(e) {
+    console.error('İptal hatası:', e);
+  }
+};
 
 // ─── TOAST ───────────────────────────────────────────────
 function toast(msg, type = 'info') {

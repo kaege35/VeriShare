@@ -34,7 +34,12 @@ async fn send_paths_directly(app: AppHandle, peer_ip: String, paths: Vec<String>
     let app_c = app.clone();
     tauri::async_runtime::spawn(async move {
         if let Err(e) = transfer::send_items(&peer_ip, pbs, app_c.clone()).await {
-            let _ = app_c.emit("transfer-event", format!("Hata: {}", e));
+            let msg = format!("{}", e);
+            if msg.contains("İPTAL_EDİLDİ") {
+                let _ = app_c.emit("transfer-event", "Transfer iptal edildi.".to_string());
+            } else {
+                let _ = app_c.emit("transfer-event", format!("Hata: {}", e));
+            }
         }
     });
     Ok(())
@@ -48,6 +53,10 @@ async fn respond_to_transfer(id: String, accept: bool) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn cancel_transfer(id: String) -> Result<(), String> {
+    transfer::cancel_transfer_by_id(id).await
+}
 
 #[tauri::command]
 fn get_wifi_ssid() -> Result<String, String> {
@@ -74,19 +83,54 @@ fn get_wifi_ssid() -> Result<String, String> {
             if !text.contains("You are not associated") {
                 if let Some(ssid) = text.split(": ").nth(1) {
                     let s = ssid.trim();
-                    if !s.is_empty() { return Ok(s.to_string()); }
+                    if !s.is_empty() && s != "<redacted>" { return Ok(s.to_string()); }
                 }
             }
         }
         
-        // 3. Fallback olarak ipconfig getsummary <wifi_if> deneyelim (macOS 14.4+ öncesi ve bazı kurumsal profillerde çalışabilir)
+        // 3. ipconfig getsummary <wifi_if> 
         if let Ok(output) = std::process::Command::new("ipconfig").args(["getsummary", &wifi_if]).output() {
             let text = String::from_utf8_lossy(&output.stdout).to_string();
             for line in text.lines() {
                 if line.contains(" SSID : ") {
                     if let Some(ssid) = line.split(" SSID : ").nth(1) {
                         let s = ssid.trim();
-                        // Apple Gizlilik Politikası SSID'yi <redacted> loglarsa 
+                        if !s.is_empty() && s != "<redacted>" { return Ok(s.to_string()); }
+                    }
+                }
+            }
+        }
+
+        // 4. system_profiler SPAirPortDataType — bazı macOS sürümlerinde SSID'yi burada gösterir
+        if let Ok(output) = std::process::Command::new("system_profiler").args(["SPAirPortDataType"]).output() {
+            let text = String::from_utf8_lossy(&output.stdout).to_string();
+            let mut found_current = false;
+            for line in text.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("Current Network Information:") {
+                    found_current = true;
+                    continue;
+                }
+                if found_current && trimmed.ends_with(':') && !trimmed.contains("Current") {
+                    let ssid = trimmed.trim_end_matches(':').trim();
+                    if !ssid.is_empty() && ssid != "<redacted>" {
+                        return Ok(ssid.to_string());
+                    }
+                }
+                if found_current && trimmed.is_empty() {
+                    break;
+                }
+            }
+        }
+
+        // 5. wdutil info — macOS 14.4+ için
+        if let Ok(output) = std::process::Command::new("wdutil").args(["info"]).output() {
+            let text = String::from_utf8_lossy(&output.stdout).to_string();
+            for line in text.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("SSID") && trimmed.contains(':') {
+                    if let Some(ssid) = trimmed.split(':').nth(1) {
+                        let s = ssid.trim();
                         if !s.is_empty() && s != "<redacted>" { return Ok(s.to_string()); }
                     }
                 }
@@ -144,6 +188,7 @@ pub fn run() {
             start_discovery, 
             send_paths_directly,
             respond_to_transfer,
+            cancel_transfer,
             install_update,
             get_wifi_ssid,
             scan_network

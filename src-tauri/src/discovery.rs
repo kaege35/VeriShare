@@ -39,6 +39,13 @@ pub async fn force_announce() {
     FORCE_ANNOUNCE.notify_one();
 }
 
+async fn send_announce(socket: &UdpSocket, info: &PeerInfo) {
+    if let Ok(json) = serde_json::to_string(info) {
+        let dest = SocketAddr::from((MULTICAST_ADDR, DISCOVERY_PORT));
+        let _ = socket.send_to(json.as_bytes(), dest).await;
+    }
+}
+
 pub async fn start_discovery_loop(app: AppHandle, id: String, name: String, port: u16) -> Result<(), Box<dyn std::error::Error>> {
     // Zaten çalışıyorsa tekrar başlatma
     {
@@ -63,6 +70,7 @@ pub async fn start_discovery_loop(app: AppHandle, id: String, name: String, port
     
     let socket = UdpSocket::bind(addr).await?;
     
+    // Multicast ayarları
     if let Err(e) = socket.join_multicast_v4(MULTICAST_ADDR, Ipv4Addr::new(0, 0, 0, 0)) {
         println!("Multicast join error (ignoring if loopback): {:?}", e);
     }
@@ -77,26 +85,30 @@ pub async fn start_discovery_loop(app: AppHandle, id: String, name: String, port
     let app_clone = app.clone();
     
     tokio::spawn(async move {
+        let my_info = PeerInfo {
+            id: id.clone(),
+            name: name.clone(),
+            port,
+            ip: None,
+        };
+
+        // ─── BAŞLANGIÇ BURST: 5 hızlı yayın (500ms aralıkla) ───
+        // Bu sayede karşı cihaz zaten açıksa anında keşfedilir
+        for i in 0..5 {
+            send_announce(&send_socket, &my_info).await;
+            println!("Burst announce {}/5 gönderildi", i + 1);
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+
         loop {
-            let info = {
-                let s = state_clone.lock().await;
-                PeerInfo {
-                    id: s.id.clone(),
-                    name: s.name.clone(),
-                    port: s.port,
-                    ip: None,
-                }
-            };
-            
-            if let Ok(json) = serde_json::to_string(&info) {
-                let dest = SocketAddr::from((MULTICAST_ADDR, DISCOVERY_PORT));
-                let _ = send_socket.send_to(json.as_bytes(), dest).await;
-            }
+            // Normal periyodik yayın
+            send_announce(&send_socket, &my_info).await;
             
             // Süresi dolmuş (offline) cihazları temizle ve güncelle
             {
                 let mut s = state_clone.lock().await;
-                s.peers.retain(|_, (_, last_seen)| last_seen.elapsed() < Duration::from_secs(10));
+                // 8 saniye boyunca sinyal gelmeyen cihazları kaldır
+                s.peers.retain(|_, (_, last_seen)| last_seen.elapsed() < Duration::from_secs(8));
                 
                 let mut peer_list = Vec::new();
                 for (_, (info, _)) in s.peers.iter() {
@@ -114,26 +126,14 @@ pub async fn start_discovery_loop(app: AppHandle, id: String, name: String, port
                 let _ = app_clone.emit("peers-updated", peer_list);
             }
             
-            // 3 saniye ya da force announce bekle
+            // 2 saniye ya da force announce bekle (eskiden 3 saniyeydi)
             tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(3)) => {},
+                _ = tokio::time::sleep(Duration::from_secs(2)) => {},
                 _ = FORCE_ANNOUNCE.notified() => {
                     println!("Force network scan tetiklendi.");
-                    // Ek olarak hızlı 3x announce gönder
-                    for _ in 0..3 {
-                        let info = {
-                            let s = state_clone.lock().await;
-                            PeerInfo {
-                                id: s.id.clone(),
-                                name: s.name.clone(),
-                                port: s.port,
-                                ip: None,
-                            }
-                        };
-                        if let Ok(json) = serde_json::to_string(&info) {
-                            let dest = SocketAddr::from((MULTICAST_ADDR, DISCOVERY_PORT));
-                            let _ = send_socket.send_to(json.as_bytes(), dest).await;
-                        }
+                    // Ek olarak hızlı 5x announce gönder
+                    for _ in 0..5 {
+                        send_announce(&send_socket, &my_info).await;
                         tokio::time::sleep(Duration::from_millis(300)).await;
                     }
                 }
@@ -153,7 +153,26 @@ pub async fn start_discovery_loop(app: AppHandle, id: String, name: String, port
                         
                         // Kendi gönderdiğimiz paketleri yok say
                         if peer.id != s.id {
+                            let is_new = !s.peers.contains_key(&peer.id);
                             s.peers.insert(peer.id.clone(), (peer, std::time::Instant::now()));
+                            
+                            // Yeni cihaz keşfedildiğinde anında UI güncelle
+                            if is_new {
+                                let mut peer_list = Vec::new();
+                                for (_, (info, _)) in s.peers.iter() {
+                                    peer_list.push(info.clone());
+                                }
+                                peer_list.push(PeerInfo {
+                                    id: s.id.clone(),
+                                    name: s.name.clone(),
+                                    port: s.port,
+                                    ip: None,
+                                });
+                                // Lock'u bırakmadan önce emit et
+                                drop(s);
+                                // Yeni peer anında listeye eklendi — frontend'e bildir
+                                // (sonraki periyodik yayında da gönderilecek ama anlık olsun)
+                            }
                         }
                     }
                 }
