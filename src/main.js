@@ -37,10 +37,24 @@ document.addEventListener("DOMContentLoaded", () => {
     invoke('send_paths_directly', { peerIp: selectedUser.ip, paths });
   });
 
-  document.getElementById('browse-btn').addEventListener('click', () => {
+  const { open } = window.__TAURI__.dialog;
+
+  document.getElementById('browse-btn').addEventListener('click', async () => {
     if (!selectedUser) { toast('Önce bir kişi seç', 'error'); return; }
     if (!selectedUser.ip) { toast('Ağ adresi yok', 'error'); return; }
-    invoke('open_file_dialog', { peerIp: selectedUser.ip });
+    
+    try {
+      const filePaths = await open({
+        multiple: true,
+        directory: false,
+        title: "Dosyaları Seç",
+      });
+      
+      if (!filePaths || filePaths.length === 0) return;
+      invoke('send_paths_directly', { peerIp: selectedUser.ip, paths: filePaths });
+    } catch(e) {
+      toast('Dosya seçimi iptal edildi veya hata oluştu.', 'error');
+    }
   });
 
   // Yenile butonu

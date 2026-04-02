@@ -48,56 +48,52 @@ async fn respond_to_transfer(id: String, accept: bool) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-async fn open_file_dialog(app: AppHandle, peer_ip: String) -> Result<(), String> {
-    use tauri_plugin_dialog::DialogExt;
-    let app_for_dialog = app.clone();
-    app_for_dialog.dialog().file().pick_files(move |file_paths| {
-        if let Some(paths) = file_paths {
-            let pbs: Vec<std::path::PathBuf> = paths
-                .into_iter()
-                .filter_map(|p| {
-                    match p.into_path() {
-                        Ok(path) => Some(path),
-                        Err(e) => {
-                            println!("Dosya yolu dönüştürme hatası: {:?}", e);
-                            None
-                        }
-                    }
-                })
-                .collect();
-            
-            if pbs.is_empty() {
-                return;
-            }
-
-            let app_c = app.clone();
-            let peer_ip_c = peer_ip.clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(e) = transfer::send_items(&peer_ip_c, pbs, app_c.clone()).await {
-                    let _ = app_c.emit("transfer-event", format!("Hata: {}", e));
-                }
-            });
-        }
-    });
-    Ok(())
-}
 
 #[tauri::command]
 fn get_wifi_ssid() -> Result<String, String> {
     #[cfg(target_os = "macos")]
     {
-        let output = std::process::Command::new("networksetup")
-            .args(["-getairportnetwork", "en0"])
-            .output()
-            .map_err(|e| e.to_string())?;
-        let text = String::from_utf8_lossy(&output.stdout).to_string();
-        // Çıktı: "Current Wi-Fi Network: MyNetwork"
-        if let Some(ssid) = text.split(": ").nth(1) {
-            Ok(ssid.trim().to_string())
-        } else {
-            Err("WiFi ağı bulunamadı".to_string())
+        // 1. Wi-Fi donanım arayüzünü (en0, en1 vb) dinamik bulalım
+        let mut wifi_if = "en0".to_string();
+        if let Ok(output) = std::process::Command::new("networksetup").args(["-listallhardwareports"]).output() {
+            let ports = String::from_utf8_lossy(&output.stdout).to_string();
+            let lines: Vec<&str> = ports.lines().collect();
+            for (i, line) in lines.iter().enumerate() {
+                if line.contains("Hardware Port: Wi-Fi") && i + 1 < lines.len() {
+                    let next_line = lines[i + 1];
+                    if next_line.contains("Device: ") {
+                        wifi_if = next_line.replace("Device: ", "").trim().to_string();
+                    }
+                }
+            }
         }
+
+        // 2. networksetup -getairportnetwork ile SSID alalım
+        if let Ok(output) = std::process::Command::new("networksetup").args(["-getairportnetwork", &wifi_if]).output() {
+            let text = String::from_utf8_lossy(&output.stdout).to_string();
+            if !text.contains("You are not associated") {
+                if let Some(ssid) = text.split(": ").nth(1) {
+                    let s = ssid.trim();
+                    if !s.is_empty() { return Ok(s.to_string()); }
+                }
+            }
+        }
+        
+        // 3. Fallback olarak ipconfig getsummary <wifi_if> deneyelim (macOS 14.4+ öncesi ve bazı kurumsal profillerde çalışabilir)
+        if let Ok(output) = std::process::Command::new("ipconfig").args(["getsummary", &wifi_if]).output() {
+            let text = String::from_utf8_lossy(&output.stdout).to_string();
+            for line in text.lines() {
+                if line.contains(" SSID : ") {
+                    if let Some(ssid) = line.split(" SSID : ").nth(1) {
+                        let s = ssid.trim();
+                        // Apple Gizlilik Politikası SSID'yi <redacted> loglarsa 
+                        if !s.is_empty() && s != "<redacted>" { return Ok(s.to_string()); }
+                    }
+                }
+            }
+        }
+
+        Err("WiFi ağı bulunamadı (Apple Gizlilik)".to_string())
     }
     #[cfg(target_os = "windows")]
     {
@@ -146,7 +142,6 @@ pub fn run() {
         }))
         .invoke_handler(tauri::generate_handler![
             start_discovery, 
-            open_file_dialog,
             send_paths_directly,
             respond_to_transfer,
             install_update,
