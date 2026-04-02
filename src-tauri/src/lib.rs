@@ -102,6 +102,8 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
     let updater = app.updater().map_err(|e| e.to_string())?;
     if let Some(update) = updater.check().await.map_err(|e| e.to_string())? {
         update.download_and_install(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
+        // Güncelleme bittikten sonra uygulamayı otomatik yeniden başlat
+        app.restart();
     }
     Ok(())
 }
@@ -171,10 +173,10 @@ pub fn run() {
                 }
             });
 
-            // Açılışta arka planda otomatik güncelleme kontrolü
+            // Açılışta arka planda anında otomatik güncelleme kontrolü
             let updater_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                // Gecikmeyi kaldırdık (hemen sorar)
                 use tauri_plugin_updater::UpdaterExt;
                 match updater_handle.updater() {
                     Ok(updater) => {

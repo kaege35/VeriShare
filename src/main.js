@@ -170,9 +170,22 @@ function showUpdateBanner(version) {
 }
 
 window.doUpdate = async () => {
-  const { relaunch } = window.__TAURI__.process;
-  await invoke('install_update');
-  await relaunch();
+  const btn = document.querySelector('#update-banner button');
+  if (btn) {
+    btn.textContent = 'İndiriliyor ve Kuruluyor (Lütfen Bekleyin)...';
+    btn.disabled = true;
+  }
+  
+  try {
+    await invoke('install_update');
+    // Rust tarafında app.restart() çağrılacağı için burada ekstra bir şey yapmamıza gerek yok
+  } catch(e) {
+    toast('Güncelleme hatası: ' + e, 'error');
+    if (btn) {
+      btn.textContent = 'Hemen Güncelle';
+      btn.disabled = false;
+    }
+  }
 };
 
 let currentTransferId = null;
