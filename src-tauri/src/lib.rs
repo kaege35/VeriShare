@@ -108,6 +108,28 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn show_in_folder(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    { std::process::Command::new("explorer").args(["/select,", &path]).spawn().map_err(|e| e.to_string())?; }
+    #[cfg(target_os = "macos")]
+    { std::process::Command::new("open").args(["-R", &path]).spawn().map_err(|e| e.to_string())?; }
+    #[cfg(target_os = "linux")]
+    { std::process::Command::new("xdg-open").arg(&path).spawn().map_err(|e| e.to_string())?; }
+    Ok(())
+}
+
+#[tauri::command]
+fn open_file(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    { std::process::Command::new("explorer").arg(&path).spawn().map_err(|e| e.to_string())?; }
+    #[cfg(target_os = "macos")]
+    { std::process::Command::new("open").arg(&path).spawn().map_err(|e| e.to_string())?; }
+    #[cfg(target_os = "linux")]
+    { std::process::Command::new("xdg-open").arg(&path).spawn().map_err(|e| e.to_string())?; }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -127,7 +149,9 @@ pub fn run() {
             cancel_transfer,
             install_update,
             get_wifi_ssid,
-            scan_network
+            scan_network,
+            open_file,
+            show_in_folder
         ])
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())

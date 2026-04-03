@@ -615,6 +615,24 @@ body::after {
   opacity: 0.7;
 }
 
+.log-clear-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  margin-left: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+.log-clear-btn:hover {
+  color: var(--text);
+  background: rgba(0,0,0,0.05);
+}
+
 .log-count {
   font-size: 10px;
   font-weight: 600;
@@ -628,8 +646,8 @@ body::after {
 
 .log-item {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 4px;
   padding: 10px 8px;
   border-bottom: 1px solid rgba(0,0,0,0.04);
   font-size: 12px;
@@ -786,6 +804,33 @@ body::after {
 
 .log-item.error .log-progress-fill {
   background: var(--danger);
+}
+
+.log-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  width: 100%;
+}
+
+.log-action-btn {
+  flex: 1;
+  padding: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.log-action-btn:hover {
+  background: var(--surface2);
+  border-color: var(--text);
+  color: var(--text);
 }
 
 /* MODAL */

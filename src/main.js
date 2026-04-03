@@ -5,14 +5,12 @@ const { listen } = window.__TAURI__.event;
 let myName = '';
 let myId = null;
 let selectedUser = null;
-let pendingTransfer = null; 
 let logItems = {};
 let logCount = 0;
-let activeTransferId = null; // Gönderim transfer ID'si
+let activeTransferId = null;
 
 // ─── INIT ─────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
-  // Event Listeners
   document.getElementById('join-btn').addEventListener('click', joinNetwork);
   
   document.getElementById('name-input').addEventListener('keydown', (e) => {
@@ -21,12 +19,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const dropArea = document.getElementById('drop-area');
   
-  // Tauri v2 drag-drop events (doğru event isimleri)
   listen('tauri://drag-enter', () => { if (selectedUser) dropArea.classList.add('dragging'); });
   listen('tauri://drag-over', () => { if (selectedUser) dropArea.classList.add('dragging'); });
   listen('tauri://drag-leave', () => dropArea.classList.remove('dragging'));
 
-  // Sürükle-bırak: tauri://drag-drop (v2'de tauri://drop değil!)
   listen('tauri://drag-drop', async (e) => {
     dropArea.classList.remove('dragging');
     if (!selectedUser) { toast('Önce bir kişi seç', 'error'); return; }
@@ -54,11 +50,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!filePaths || filePaths.length === 0) return;
       invoke('send_paths_directly', { peerIp: selectedUser.ip, paths: filePaths });
     } catch(e) {
-      toast('Dosya seçimi iptal edildi veya hata oluştu.', 'error');
+      toast('Dosya seçimi iptal edildi.', 'info');
     }
   });
 
-  // Yenile butonu
   document.getElementById('refresh-btn').addEventListener('click', async () => {
     const btn = document.getElementById('refresh-btn');
     btn.classList.add('spinning');
@@ -71,48 +66,64 @@ document.addEventListener("DOMContentLoaded", () => {
     setTimeout(() => btn.classList.remove('spinning'), 1500);
   });
 
-  // Gelen onay istekleri
+  document.getElementById('log-clear-btn').addEventListener('click', () => {
+    const list = document.getElementById('log-list');
+    const items = list.querySelectorAll('.log-item.done, .log-item.success, .log-item.error, .log-item.cancelled');
+    items.forEach(el => {
+      const peerId = el.dataset.transferId;
+      if (peerId) delete logItems[peerId];
+      el.remove();
+      logCount = Math.max(0, logCount - 1);
+    });
+    document.getElementById('log-count').textContent = logCount;
+  });
+
   listen('transfer-request', (event) => {
     const p = event.payload;
     showModal(p.id, p.total_files, p.total_size);
   });
 
-  // Genel hata ve durum bildirimleri
   listen('transfer-event', (event) => {
     const msg = event.payload;
     if (msg.includes("ERİŞİM_REDDEDİLDİ")) {
       toast('Karşı taraf aktarımı reddetti', 'error');
-    } else if (msg.includes("iptal")) {
+      // Update UI if we had activeTransferId
+      if (activeTransferId) {
+        updateLog(activeTransferId, 'Reddedildi', 'error', 0);
+      }
+    } else if (msg.includes("iptal") || msg.includes("İPTAL")) {
       toast(msg, 'info');
     } else {
       toast(msg, 'error');
     }
   });
 
-  // Backend'den gelen transfer ID eşleştirmesi
   listen('transfer-id-assigned', (event) => {
     activeTransferId = event.payload.transfer_id;
   });
 
-  // Gelen dosya ilerleme
+  listen('transfer-initiated', (event) => {
+    const { transfer_id, text, dir } = event.payload;
+    const statusText = dir === 'out' ? 'Karşı tarafın onayı bekleniyor...' : 'Başlıyor...';
+    addLog(transfer_id, text, dir, statusText);
+    if (dir === 'out') { activeTransferId = transfer_id; }
+  });
+
   listen('transfer-progress', (event) => {
-    const { id, pct, text, is_done, cancelled } = event.payload;
+    const { id, pct, text, is_done, cancelled, path } = event.payload;
     if (cancelled) {
       updateLog(id, 'İptal Edildi', 'cancelled', pct);
-      toast('Transfer iptal edildi', 'info');
+      toast('Alım iptal edildi', 'info');
       return;
     }
-    if (pct === 0 && text) {
-      addLog(id, text, 'in', 'Başlıyor...');
-    } else if (is_done) {
-      updateLog(id, 'Tamamlandı', 'done', 100);
-      toast(text || 'Transfer bitti!', 'success');
+    if (is_done) {
+      updateLog(id, 'Tamamlandı', 'done', 100, path);
+      toast(text + ' indirildi!', 'success');
     } else {
       updateLog(id, `%${pct}`, '', pct);
     }
   });
 
-  // Giden dosya ilerleme
   listen('transfer-out-progress', (event) => {
     const { id, pct, text, is_done, cancelled } = event.payload;
     if (cancelled) {
@@ -120,28 +131,23 @@ document.addEventListener("DOMContentLoaded", () => {
       toast('Gönderim iptal edildi', 'info');
       return;
     }
-    if (pct === 0 && text) {
-      addLog(id, text, 'out', 'Gönderiliyor...');
-    } else if (is_done) {
+    if (is_done) {
       updateLog(id, 'İletildi', 'success', 100);
-      toast(text || 'Gönderim tamamlandı!', 'success');
+      toast(text + ' gönderildi!', 'success');
     } else {
       updateLog(id, `%${pct}`, '', pct);
     }
   });
 
-  // Ağ cihazları güncelleme
   listen('peers-updated', (event) => {
     updateUserList(event.payload);
   });
 
-  // Otomatik güncelleme
   listen('update-available', (event) => {
     const version = event.payload;
     showUpdateBanner(version);
   });
 
-  // Accept/Decline butonları
   const acceptBtn = document.getElementById('accept-btn');
   if(acceptBtn) acceptBtn.addEventListener('click', () => {
     document.getElementById('incoming-modal').classList.remove('visible');
@@ -172,13 +178,12 @@ function showUpdateBanner(version) {
 window.doUpdate = async () => {
   const btn = document.querySelector('#update-banner button');
   if (btn) {
-    btn.textContent = 'İndiriliyor ve Kuruluyor (Lütfen Bekleyin)...';
+    btn.textContent = 'İndiriliyor ve Kuruluyor...';
     btn.disabled = true;
   }
   
   try {
     await invoke('install_update');
-    // Rust tarafında app.restart() çağrılacağı için burada ekstra bir şey yapmamıza gerek yok
   } catch(e) {
     toast('Güncelleme hatası: ' + e, 'error');
     if (btn) {
@@ -193,7 +198,7 @@ let currentTransferId = null;
 function showModal(transferId, count, size) {
   currentTransferId = transferId;
   const overlay = document.getElementById('incoming-modal');
-  document.getElementById('modal-file-name').textContent = `${count} adet dosya/klasör`;
+  document.getElementById('modal-file-name').textContent = `${count} adet içerik`;
   document.getElementById('modal-file-meta').textContent = formatSize(size);
   overlay.classList.add('visible');
 }
@@ -205,14 +210,12 @@ async function joinNetwork() {
   myName = name;
   
   try {
-    // start_discovery artık self ID döndürüyor
     myId = await invoke('start_discovery', { name });
     
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').classList.add('visible');
     document.getElementById('header-name').textContent = myName;
 
-    // WiFi SSID'yi al
     fetchWifiSSID();
   } catch(e) {
     toast('Ağa katılma hatası: ' + e, 'error');
@@ -228,7 +231,6 @@ async function fetchWifiSSID() {
     }
   } catch(e) {
     console.log('WiFi SSID alınamadı:', e);
-    // Varsayılan metin kalır
   }
 }
 
@@ -237,7 +239,6 @@ function updateUserList(users) {
   const list = document.getElementById('user-list');
   const count = document.getElementById('online-count');
   
-  // ID bazlı filtreleme (isim yerine)
   const otherUsers = users.filter(u => u.id !== myId);
   count.textContent = otherUsers.length;
   list.innerHTML = '';
@@ -263,12 +264,11 @@ function updateUserList(users) {
     list.appendChild(el);
   });
 
-  // Seçili kullanıcı ağdan ayrıldıysa
   if (selectedUser && !users.find(u => u.id === selectedUser.id)) {
     const oldName = selectedUser.name;
     selectedUser = null;
     showDropUI(false);
-    toast(`${oldName} ağdan ayrıldı`, 'error');
+    toast(`${oldName} ağdan ayrıldı`, 'info');
   }
 }
 
@@ -290,10 +290,11 @@ function showDropUI(show) {
 }
 
 // ─── LOG ─────────────────────────────────────────────────
-function addLog(peerId, fileName, direction, statusText) {
+function addLog(transferId, fileName, direction, statusText) {
+  if (logItems[transferId]) return; // Zaten varsa tekrar ekleme
+
   const list = document.getElementById('log-list');
-  const id = `log-${peerId}-${Date.now()}`;
-  logItems[peerId] = id;
+  logItems[transferId] = transferId;
   logCount++;
   document.getElementById('log-count').textContent = logCount;
 
@@ -305,40 +306,53 @@ function addLog(peerId, fileName, direction, statusText) {
 
   const el = document.createElement('div');
   el.className = 'log-item';
-  el.id = id;
-  el.dataset.transferId = peerId;
+  el.id = 'log-' + transferId;
+  el.dataset.transferId = transferId;
   el.innerHTML = `
-    <div class="log-icon ${dirClass}">${dirIcon}</div>
-    <div class="log-text"><strong>${fileName}</strong></div>
-    <div class="log-progress"><div class="log-progress-fill" style="width:0%"></div></div>
-    <div class="log-status">${statusText}</div>
-    <button class="log-cancel-btn" title="İptal Et" onclick="cancelTransfer('${peerId}')">✕</button>
+    <div style="display:flex; align-items:center; width:100%; gap:12px;">
+      <div class="log-icon ${dirClass}">${dirIcon}</div>
+      <div class="log-text"><strong>${fileName}</strong></div>
+      <div class="log-progress"><div class="log-progress-fill" style="width:0%"></div></div>
+      <div class="log-status">${statusText}</div>
+      <button class="log-cancel-btn" title="İptal Et" onclick="cancelTransfer('${transferId}')">✕</button>
+    </div>
+    <div class="log-actions" style="display:none;" id="actions-${transferId}">
+      <button class="log-action-btn" onclick="openPath('${transferId}')">Aç</button>
+      <button class="log-action-btn" onclick="showInFolder('${transferId}')">Klasörde Göster</button>
+    </div>
   `;
   list.prepend(el);
   list.scrollTop = 0;
 }
 
-function updateLog(peerId, statusText, statusClass, pct) {
-  const id = logItems[peerId];
-  if (!id) return;
-  const el = document.getElementById(id);
+function updateLog(transferId, statusText, statusClass, pct, savedPath) {
+  const el = document.getElementById('log-' + transferId);
   if (!el) return;
   const status = el.querySelector('.log-status');
   const fill = el.querySelector('.log-progress-fill');
   const cancelBtn = el.querySelector('.log-cancel-btn');
+  const actions = el.querySelector('#actions-' + transferId);
+  
   if (status) { 
     status.textContent = statusText; 
     status.className = `log-status ${statusClass || ''}`; 
   }
   if (statusClass) el.classList.add(statusClass);
   if (fill && pct !== undefined) fill.style.width = pct + '%';
-  // Tamamlandı, iptal edildi veya hata durumunda iptal butonunu gizle
+  
   if (statusClass === 'done' || statusClass === 'success' || statusClass === 'cancelled' || statusClass === 'error') {
     if (cancelBtn) cancelBtn.style.display = 'none';
   }
+
+  if (statusClass === 'done' && savedPath) {
+    el.style.flexDirection = 'column';
+    if (actions) {
+      actions.style.display = 'flex';
+      el.dataset.savedPath = savedPath; // Tıklanınca açmak için saklıyoruz
+    }
+  }
 }
 
-// İptal fonksiyonu (global scope — HTML onclick'ten erişilebilmesi için)
 window.cancelTransfer = async (transferId) => {
   try {
     await invoke('cancel_transfer', { id: transferId });
@@ -347,6 +361,16 @@ window.cancelTransfer = async (transferId) => {
   } catch(e) {
     console.error('İptal hatası:', e);
   }
+};
+
+window.openPath = async (transferId) => {
+  const el = document.getElementById('log-' + transferId);
+  if(el && el.dataset.savedPath) invoke('open_file', { path: el.dataset.savedPath });
+};
+
+window.showInFolder = async (transferId) => {
+  const el = document.getElementById('log-' + transferId);
+  if(el && el.dataset.savedPath) invoke('show_in_folder', { path: el.dataset.savedPath });
 };
 
 // ─── TOAST ───────────────────────────────────────────────
