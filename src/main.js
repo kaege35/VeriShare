@@ -162,7 +162,7 @@ function showUpdateBanner(version) {
   const banner = document.createElement('div');
   banner.id = 'update-banner';
   banner.innerHTML = `
-    <span>🚀 <strong>EasyShare v${version}</strong> mevcut!</span>
+    <span>🚀 <strong>VeriShare v${version}</strong> mevcut!</span>
     <button onclick="doUpdate()">Hemen Güncelle</button>
     <button onclick="this.parentElement.remove()" style="background:transparent;border:none;color:inherit;cursor:pointer;margin-left:4px;font-size:16px;">✕</button>
   `;

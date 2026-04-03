@@ -78,14 +78,9 @@ body::after {
 }
 
 .login-logo {
-  font-family: 'Syne', sans-serif;
-  font-size: 32px;
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-
-.login-logo span {
-  color: var(--accent);
+  height: 52px;
+  margin-bottom: 12px;
+  display: block;
 }
 
 .login-sub {
@@ -180,13 +175,8 @@ body::after {
 }
 
 .header-logo {
-  font-family: 'Syne', sans-serif;
-  font-weight: 700;
-  font-size: 20px;
-}
-
-.header-logo span {
-  color: var(--accent);
+  height: 24px;
+  display: flex;
 }
 
 .header-meta {
