@@ -394,23 +394,17 @@ body::after {
   opacity: 1;
 }
 
-/* CONTENT AREA */
-.content {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
 /* DROP ZONE */
 .drop-area {
-  flex: 1;
+  height: 260px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px;
+  padding: 20px 40px;
   position: relative;
   transition: all 0.2s;
+  border-bottom: 1px solid var(--border);
 }
 
 .drop-area.dragging .drop-frame {
@@ -459,11 +453,11 @@ body::after {
 /* Drop Frame */
 .drop-frame {
   width: 100%;
-  max-width: 520px;
-  padding: 48px 40px;
+  max-width: 480px;
+  padding: 24px 40px;
   border: 2px dashed var(--border);
   background: var(--surface);
-  border-radius: 16px;
+  border-radius: 12px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.03);
   display: flex;
   flex-direction: column;
@@ -479,14 +473,14 @@ body::after {
 }
 
 .drop-icon-container {
-  width: 72px;
-  height: 72px;
-  border-radius: 16px;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
   background: rgba(215, 35, 35, 0.05);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
   transition: all 0.3s;
 }
 
@@ -569,8 +563,7 @@ body::after {
 
 /* TRANSFER LOG */
 .transfer-log {
-  border-top: 1px solid var(--border);
-  height: 200px;
+  flex: 1;
   overflow-y: auto;
   padding: 0 24px 12px;
   background: rgba(255, 255, 255, 0.5);
@@ -646,13 +639,13 @@ body::after {
 
 .log-item {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 8px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
   border-bottom: 1px solid rgba(0,0,0,0.04);
   font-size: 12px;
   animation: fadeIn 0.3s ease;
-  border-radius: 6px;
+  border-radius: 8px;
   transition: background 0.15s;
 }
 
@@ -808,29 +801,40 @@ body::after {
 
 .log-actions {
   display: flex;
-  gap: 6px;
-  margin-top: 4px;
-  width: 100%;
+  gap: 8px;
+  margin-left: auto;
 }
 
-.log-action-btn {
-  flex: 1;
-  padding: 6px;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
+.log-action-btn, .log-delete-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-secondary);
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s;
+  padding: 0;
 }
 
 .log-action-btn:hover {
   background: var(--surface2);
-  border-color: var(--text);
-  color: var(--text);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.log-delete-btn:hover {
+  background: rgba(255, 59, 48, 0.05);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.log-action-btn svg, .log-delete-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* MODAL */

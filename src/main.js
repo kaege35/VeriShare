@@ -70,11 +70,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const list = document.getElementById('log-list');
     const items = list.querySelectorAll('.log-item.done, .log-item.success, .log-item.error, .log-item.cancelled');
     items.forEach(el => {
-      const peerId = el.dataset.transferId;
-      if (peerId) delete logItems[peerId];
+      const transferId = el.dataset.transferId;
+      if (transferId) delete logItems[transferId];
       el.remove();
-      logCount = Math.max(0, logCount - 1);
     });
+    logCount = list.children.length;
     document.getElementById('log-count').textContent = logCount;
   });
 
@@ -87,7 +87,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const msg = event.payload;
     if (msg.includes("ERİŞİM_REDDEDİLDİ")) {
       toast('Karşı taraf aktarımı reddetti', 'error');
-      // Update UI if we had activeTransferId
       if (activeTransferId) {
         updateLog(activeTransferId, 'Reddedildi', 'error', 0);
       }
@@ -104,7 +103,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   listen('transfer-initiated', (event) => {
     const { transfer_id, text, dir } = event.payload;
-    const statusText = dir === 'out' ? 'Karşı tarafın onayı bekleniyor...' : 'Başlıyor...';
+    const statusText = dir === 'out' ? 'Onay bekleniyor...' : 'Başlıyor...';
     addLog(transfer_id, text, dir, statusText);
     if (dir === 'out') { activeTransferId = transfer_id; }
   });
@@ -291,16 +290,14 @@ function showDropUI(show) {
 
 // ─── LOG ─────────────────────────────────────────────────
 function addLog(transferId, fileName, direction, statusText) {
-  if (logItems[transferId]) return; // Zaten varsa tekrar ekleme
+  if (logItems[transferId]) return;
 
   const list = document.getElementById('log-list');
   logItems[transferId] = transferId;
-  logCount++;
-  document.getElementById('log-count').textContent = logCount;
-
+  
   const dirIcon = direction === 'out' 
-    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 11 12 6 7 11"/><line x1="12" y1="18" x2="12" y2="6"/></svg>'
-    : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="7 13 12 18 17 13"/><line x1="12" y1="6" x2="12" y2="18"/></svg>';
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="17 11 12 6 7 11"/><line x1="12" y1="18" x2="12" y2="6"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="7 13 12 18 17 13"/><line x1="12" y1="6" x2="12" y2="18"/></svg>';
   
   const dirClass = direction === 'out' ? 'log-dir-out' : 'log-dir-in';
 
@@ -309,20 +306,31 @@ function addLog(transferId, fileName, direction, statusText) {
   el.id = 'log-' + transferId;
   el.dataset.transferId = transferId;
   el.innerHTML = `
-    <div style="display:flex; align-items:center; width:100%; gap:12px;">
-      <div class="log-icon ${dirClass}">${dirIcon}</div>
-      <div class="log-text"><strong>${fileName}</strong></div>
-      <div class="log-progress"><div class="log-progress-fill" style="width:0%"></div></div>
-      <div class="log-status">${statusText}</div>
-      <button class="log-cancel-btn" title="İptal Et" onclick="cancelTransfer('${transferId}')">✕</button>
-    </div>
-    <div class="log-actions" style="display:none;" id="actions-${transferId}">
-      <button class="log-action-btn" onclick="openPath('${transferId}')">Aç</button>
-      <button class="log-action-btn" onclick="showInFolder('${transferId}')">Klasörde Göster</button>
+    <div class="log-icon ${dirClass}">${dirIcon}</div>
+    <div class="log-text"><strong>${fileName}</strong></div>
+    <div class="log-progress"><div class="log-progress-fill" style="width:0%"></div></div>
+    <div class="log-status">${statusText}</div>
+    <div class="log-actions">
+      <button class="log-cancel-btn" title="İptal Et" onclick="cancelTransfer('${transferId}')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      
+      <button class="log-action-btn" title="Dosyayı Aç" style="display:none;" id="btn-open-${transferId}" onclick="openPath('${transferId}')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </button>
+      
+      <button class="log-action-btn" title="Klasörde Göster" style="display:none;" id="btn-folder-${transferId}" onclick="showInFolder('${transferId}')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      </button>
+
+      <button class="log-delete-btn" title="Listeden Kaldır" style="display:none;" id="btn-del-${transferId}" onclick="removeLogItem('${transferId}')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
     </div>
   `;
   list.prepend(el);
-  list.scrollTop = 0;
+  logCount = list.children.length;
+  document.getElementById('log-count').textContent = logCount;
 }
 
 function updateLog(transferId, statusText, statusClass, pct, savedPath) {
@@ -331,7 +339,9 @@ function updateLog(transferId, statusText, statusClass, pct, savedPath) {
   const status = el.querySelector('.log-status');
   const fill = el.querySelector('.log-progress-fill');
   const cancelBtn = el.querySelector('.log-cancel-btn');
-  const actions = el.querySelector('#actions-' + transferId);
+  const btnOpen = el.querySelector('#btn-open-' + transferId);
+  const btnFolder = el.querySelector('#btn-folder-' + transferId);
+  const btnDel = el.querySelector('#btn-del-' + transferId);
   
   if (status) { 
     status.textContent = statusText; 
@@ -342,16 +352,25 @@ function updateLog(transferId, statusText, statusClass, pct, savedPath) {
   
   if (statusClass === 'done' || statusClass === 'success' || statusClass === 'cancelled' || statusClass === 'error') {
     if (cancelBtn) cancelBtn.style.display = 'none';
+    if (btnDel) btnDel.style.display = 'flex';
   }
 
   if (statusClass === 'done' && savedPath) {
-    el.style.flexDirection = 'column';
-    if (actions) {
-      actions.style.display = 'flex';
-      el.dataset.savedPath = savedPath; // Tıklanınca açmak için saklıyoruz
-    }
+    if (btnOpen) btnOpen.style.display = 'flex';
+    if (btnFolder) btnFolder.style.display = 'flex';
+    el.dataset.savedPath = savedPath;
   }
 }
+
+window.removeLogItem = (transferId) => {
+  const el = document.getElementById('log-' + transferId);
+  if (el) {
+    el.remove();
+    delete logItems[transferId];
+    logCount = document.getElementById('log-list').children.length;
+    document.getElementById('log-count').textContent = logCount;
+  }
+};
 
 window.cancelTransfer = async (transferId) => {
   try {
