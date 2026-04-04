@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "VeriShare",
-  "version": "4.2.1",
-  "identifier": "com.easyshare.app",
+  "version": "4.2.2",
+  "identifier": "com.verishare.app",
   "build": {
     "frontendDist": "../src"
   },
@@ -24,7 +24,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/kaege35/EasyShare/releases/latest/download/latest.json"
+        "https://github.com/kaege35/VeriShare/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUwMjkyOTZBMTk0NkNEMjgKUldRb3pVWVphaWtwVUhWbWxaVGFWNVBzaWJuTnNMNm52Wlp5WVVKQ21SRW9sWHJKbjVZckpFSmIK"
     }

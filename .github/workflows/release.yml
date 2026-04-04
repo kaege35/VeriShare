@@ -1,4 +1,4 @@
-name: EasyShare Multi-Platform Release
+name: VeriShare Multi-Platform Release
 
 on:
   push:
@@ -44,7 +44,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: 'v__VERSION__'
-          releaseName: 'EasyShare v__VERSION__'
+          releaseName: 'VeriShare v__VERSION__'
           releaseBody: 'Yeni sürüm yayınlandı! Mevcut uygulamanız otomatik güncellenecektir.'
           releaseDraft: false
           prerelease: false
