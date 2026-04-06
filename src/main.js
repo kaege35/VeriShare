@@ -133,26 +133,39 @@ function switchView(view) {
 
 // ─── HUB LOGIC ────────────────────────────────────────────
 async function hubJoin() {
-  const id = document.getElementById('hub-id-input').value.trim();
   const pass = document.getElementById('hub-pass-input').value.trim();
-  const adminKey = document.getElementById('hub-admin-key').value.trim();
 
-  if(!id || !pass) { toast('Eksik bilgi girdiniz.', 'error'); return; }
+  if(!pass) { toast('Lütfen parolayı giriniz.', 'error'); return; }
 
-  currentHubId = id;
-  isAdmin = adminKey === 'applehub123'; // Sabit veya dinamik admin key
+  const formData = new FormData();
+  formData.append('password', pass);
 
-  document.getElementById('hub-auth-container').style.display = 'none';
-  document.getElementById('hub-main-container').style.display = 'flex';
-  document.getElementById('active-hub-id').textContent = id.toUpperCase();
-  
-  const badge = document.getElementById('admin-badge');
-  badge.textContent = isAdmin ? 'LİDER' : 'ÜYE';
-  badge.className = `hub-badge ${isAdmin ? 'admin' : ''}`;
-  document.querySelector('.hub-status-text').textContent = `${id} hub oturumu aktif.`;
+  try {
+    const res = await fetch(`${HUB_API_URL}?action=login`, { method: 'POST', body: formData });
+    const data = await res.json();
+    
+    if(data.status === 'success') {
+      currentHubId = 'grafik-tasarim';
+      isAdmin = data.role === 'admin';
+      currentHubPass = pass;
 
-  startHubPolling();
-  toast('Hub bağlantısı başarılı', 'success');
+      document.getElementById('hub-auth-container').style.display = 'none';
+      document.getElementById('hub-main-container').style.display = 'flex';
+      document.getElementById('active-hub-id').textContent = "GRAFİK TASARIM HUB";
+      
+      const badge = document.getElementById('admin-badge');
+      badge.textContent = isAdmin ? 'LİDER' : 'ÜYE';
+      badge.className = `hub-badge ${isAdmin ? 'admin' : ''}`;
+      document.querySelector('.hub-status-text').textContent = `Tasarım Hub oturumu aktif.`;
+
+      startHubPolling();
+      toast(isAdmin ? 'Lider olarak giriş yapıldı' : 'Ekip üyesi olarak giriş yapıldı', 'success');
+    } else {
+      toast(data.message || 'Hatalı şifre!', 'error');
+    }
+  } catch(e) {
+    toast('Bağlantı hatası!', 'error');
+  }
 }
 
 function startHubPolling() {
