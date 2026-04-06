@@ -39,80 +39,160 @@
     </header>
 
     <div class="main">
-      <aside class="sidebar">
-        <div class="sidebar-header">
-          <span>Ağdaki Cihazlar</span>
-          <div class="sidebar-actions">
-            <button class="refresh-btn" id="refresh-btn" title="Ağı Tara">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-              </svg>
-            </button>
-            <span class="online-count" id="online-count">0</span>
+    <aside class="sidebar">
+        <div class="sidebar-tabs">
+          <button class="nav-tab active" id="tab-local">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            Lokal Ağ
+          </button>
+          <button class="nav-tab" id="tab-hub">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            Tasarım Hub
+          </button>
+        </div>
+
+        <div id="local-sidebar" class="sidebar-view active">
+          <div class="sidebar-header">
+            <span>Ağdaki Cihazlar</span>
+            <div class="sidebar-actions">
+              <button class="refresh-btn" id="refresh-btn" title="Ağı Tara">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                </svg>
+              </button>
+              <span class="online-count" id="online-count">0</span>
+            </div>
+          </div>
+          <div class="sidebar-search">
+            <input type="text" id="user-search" placeholder="İsim ara..." autocomplete="off">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+            </svg>
+          </div>
+          <div class="user-list" id="user-list"></div>
+        </div>
+
+        <div id="hub-sidebar" class="sidebar-view">
+          <div class="sidebar-header">
+            <span>Aktif Hub Paneli</span>
+          </div>
+          <div class="hub-sidebar-info">
+            <p class="hub-status-text">Hub oturumu kapalı.</p>
           </div>
         </div>
-        <div class="sidebar-search">
-          <input type="text" id="user-search" placeholder="İsim ara..." autocomplete="off">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
-          </svg>
-        </div>
-        <div class="user-list" id="user-list"></div>
       </aside>
 
       <div class="content">
-        <div class="drop-area" id="drop-area">
-          <div id="no-target" class="no-target-msg">
-            <div class="no-target-icon">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.35">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                <circle cx="9" cy="7" r="4"/>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-              </svg>
+        <!-- LOKAL GÖRÜNÜM -->
+        <div id="local-view" class="main-view active">
+          <div class="drop-area" id="drop-area">
+            <div id="no-target" class="no-target-msg">
+              <div class="no-target-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.35">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+              </div>
+              <p class="no-target-title">Hedef Cihaz Seçiniz</p>
+              <span class="sub-text">Aktarım yapmak için sol menüden bir bağlantı noktası belirleyin.</span>
             </div>
-            <p class="no-target-title">Hedef Cihaz Seçiniz</p>
-            <span class="sub-text">Aktarım yapmak için sol menüden bir bağlantı noktası belirleyin.</span>
+
+            <div id="drop-target-ui" style="display:none; flex-direction:column; align-items:center; width:100%;">
+              <div class="drop-frame" id="drop-frame">
+                <div class="drop-icon-container">
+                  <svg class="drop-svg-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                </div>
+                <div class="drop-target-name" id="drop-target-name"></div>
+                <div class="drop-hint">Dosya veya klasörleri bu alana sürükleyin</div>
+                <div class="drop-divider">
+                  <span>veya</span>
+                </div>
+                <button class="browse-btn" id="browse-btn">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                  </svg>
+                  Dosya Seç
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div id="drop-target-ui" style="display:none; flex-direction:column; align-items:center; width:100%;">
-            <div class="drop-frame" id="drop-frame">
-              <div class="drop-icon-container">
-                <svg class="drop-svg-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="17 8 12 3 7 8"/>
-                  <line x1="12" y1="3" x2="12" y2="15"/>
+          <div class="transfer-log">
+            <div class="log-header">
+              <div class="log-header-left">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
                 </svg>
+                <span>İşlem Geçmişi</span>
+                <button class="log-clear-btn" id="log-clear-btn" title="Tamamlananları Temizle">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                </button>
               </div>
-              <div class="drop-target-name" id="drop-target-name"></div>
-              <div class="drop-hint">Dosya veya klasörleri bu alana sürükleyin</div>
-              <div class="drop-divider">
-                <span>veya</span>
-              </div>
-              <button class="browse-btn" id="browse-btn">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                </svg>
-                Dosya Seç
-              </button>
+              <span class="log-count" id="log-count">0</span>
             </div>
+            <div id="log-list"></div>
           </div>
         </div>
 
-        <div class="transfer-log">
-          <div class="log-header">
-            <div class="log-header-left">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-              </svg>
-              <span>İşlem Geçmişi</span>
-              <button class="log-clear-btn" id="log-clear-btn" title="Tamamlananları Temizle">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        <!-- HUB GÖRÜNÜM -->
+        <div id="hub-view" class="main-view">
+          <div id="hub-auth-container" class="hub-overlay-view">
+            <div class="hub-login-card">
+              <div class="hub-login-icon">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#007AFF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              </div>
+              <h3>Grafik Tasarım Hub</h3>
+              <p>Ekip projesine güvenle bağlanın</p>
+              
+              <div class="apple-input-group">
+                <label>Hub Kimliği</label>
+                <input type="text" id="hub-id-input" placeholder="Örn: ege-graphic-2024" autocomplete="off">
+              </div>
+              
+              <div class="apple-input-group">
+                <label>Bağlantı Parolası</label>
+                <input type="password" id="hub-pass-input" placeholder="••••••••">
+              </div>
+
+              <div class="apple-input-group">
+                <label>Yönetici Anahtarı (Opsiyonel)</label>
+                <input type="password" id="hub-admin-key" placeholder="Lider yetkisi için">
+              </div>
+
+              <button id="hub-join-btn" class="apple-primary-btn">Hub'a Katıl</button>
+            </div>
+          </div>
+
+          <div id="hub-main-container" class="hub-flow-view" style="display: none;">
+            <div class="hub-header">
+              <div class="hub-title-group">
+                <h4 id="active-hub-id">TASARIM HUB</h4>
+                <div class="hub-badge" id="admin-badge">ÜYE</div>
+              </div>
+              <button id="hub-logout-btn" class="apple-secondary-btn small">Ayrıl</button>
+            </div>
+            
+            <div id="hub-messages" class="hub-message-list"></div>
+            
+            <div class="hub-input-bar">
+              <button id="hub-attach-btn" class="apple-icon-btn" title="Dosya Ekle">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              </button>
+              <input type="file" id="hub-file-input" style="display:none;">
+              <div class="hub-input-wrapper">
+                <input type="text" id="hub-msg-input" placeholder="Bir mesaj yazın..." autocomplete="off">
+              </div>
+              <button id="hub-send-btn" class="apple-primary-btn circular">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="22 2 11 13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/></svg>
               </button>
             </div>
-            <span class="log-count" id="log-count">0</span>
           </div>
-          <div id="log-list"></div>
         </div>
       </div>
     </div>

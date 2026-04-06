@@ -1,7 +1,7 @@
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 
-// ─── STATE ───────────────────────────────────────────────
+// ─── STATE (LOCAL & HUB) ──────────────────────────────────
 let myName = '';
 let myId = null;
 let selectedUser = null;
@@ -11,16 +11,49 @@ let activeTransferId = null;
 let lastUsers = [];
 let searchQuery = '';
 
+// HUB STATE
+const HUB_API_URL = 'https://veritasdijital.tech/onayapp/api.php';
+let currentHubId = null;
+let isAdmin = false;
+let lastMsgId = 0;
+let hubPollInterval = null;
+let pendingHubFile = null;
+
 // ─── INIT ─────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
+  // LOCAL LOGIN
   document.getElementById('join-btn').addEventListener('click', joinNetwork);
-  
   document.getElementById('name-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') joinNetwork();
   });
 
-  const dropArea = document.getElementById('drop-area');
+  // TABS
+  document.getElementById('tab-local').addEventListener('click', () => switchView('local'));
+  document.getElementById('tab-hub').addEventListener('click', () => switchView('hub'));
+
+  // HUB ACTIONS
+  document.getElementById('hub-join-btn').addEventListener('click', hubJoin);
+  document.getElementById('hub-logout-btn').addEventListener('click', hubLogout);
+  document.getElementById('hub-send-btn').addEventListener('click', hubSendMessage);
   
+  const hubAttachBtn = document.getElementById('hub-attach-btn');
+  const hubFileInput = document.getElementById('hub-file-input');
+  
+  hubAttachBtn.addEventListener('click', () => hubFileInput.click());
+  hubFileInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+      pendingHubFile = e.target.files[0];
+      hubAttachBtn.classList.add('active');
+      toast(`${pendingHubFile.name} seçildi.`, 'success');
+    }
+  });
+
+  document.getElementById('hub-msg-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') hubSendMessage();
+  });
+
+  // LOCAL P2P EVENTS
+  const dropArea = document.getElementById('drop-area');
   listen('tauri://drag-enter', () => { if (selectedUser) dropArea.classList.add('dragging'); });
   listen('tauri://drag-over', () => { if (selectedUser) dropArea.classList.add('dragging'); });
   listen('tauri://drag-leave', () => dropArea.classList.remove('dragging'));
@@ -29,31 +62,19 @@ document.addEventListener("DOMContentLoaded", () => {
     dropArea.classList.remove('dragging');
     if (!selectedUser) { toast('Önce bir kişi seç', 'error'); return; }
     if (!selectedUser.ip) { toast('Ağ adresi yok', 'error'); return; }
-    
     const paths = e.payload.paths;
     if (!paths || paths.length === 0) return;
-    
     invoke('send_paths_directly', { peerIp: selectedUser.ip, paths });
   });
 
-  const { open } = window.__TAURI__.dialog;
-
   document.getElementById('browse-btn').addEventListener('click', async () => {
     if (!selectedUser) { toast('Önce bir kişi seç', 'error'); return; }
-    if (!selectedUser.ip) { toast('Ağ adresi yok', 'error'); return; }
-    
+    const { open } = window.__TAURI__.dialog;
     try {
-      const filePaths = await open({
-        multiple: true,
-        directory: false,
-        title: "Dosyaları Seç",
-      });
-      
+      const filePaths = await open({ multiple: true, directory: false, title: "Dosyaları Seç" });
       if (!filePaths || filePaths.length === 0) return;
       invoke('send_paths_directly', { peerIp: selectedUser.ip, paths: filePaths });
-    } catch(e) {
-      toast('Dosya seçimi iptal edildi.', 'info');
-    }
+    } catch(e) { toast('İptal edildi.', 'info'); }
   });
 
   document.getElementById('refresh-btn').addEventListener('click', async () => {
@@ -62,9 +83,7 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       await invoke('scan_network');
       toast('Ağ taranıyor...', 'info');
-    } catch(e) {
-      toast('Tarama hatası: ' + e, 'error');
-    }
+    } catch(e) { toast('Hata: ' + e, 'error'); }
     setTimeout(() => btn.classList.remove('spinning'), 1500);
   });
 
@@ -85,128 +104,175 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('log-count').textContent = logCount;
   });
 
-  listen('transfer-request', (event) => {
-    const p = event.payload;
-    showModal(p.id, p.total_files, p.total_size);
+  listen('transfer-initiated', (e) => addLog(e.payload.transfer_id, e.payload.text, e.payload.dir, e.payload.dir==='out'?'Onay bekleniyor...':'Başlıyor...'));
+  listen('transfer-progress', (e) => {
+    const { id, pct, text, is_done, cancelled, path } = e.payload;
+    if (cancelled) { updateLog(id, 'İptal Edildi', 'cancelled', pct); return; }
+    if (is_done) { updateLog(id, 'Tamamlandı', 'done', 100, path); toast(text + ' indirildi!', 'success'); }
+    else { updateLog(id, `%${pct}`, '', pct); }
   });
-
-  listen('transfer-event', (event) => {
-    const msg = event.payload;
-    if (msg.includes("ERİŞİM_REDDEDİLDİ")) {
-      toast('Karşı taraf aktarımı reddetti', 'error');
-      if (activeTransferId) {
-        updateLog(activeTransferId, 'Reddedildi', 'error', 0);
-      }
-    } else if (msg.includes("iptal") || msg.includes("İPTAL")) {
-      toast(msg, 'info');
-    } else {
-      toast(msg, 'error');
-    }
+  listen('transfer-out-progress', (e) => {
+    const { id, pct, text, is_done, cancelled } = e.payload;
+    if (cancelled) { updateLog(id, 'İptal Edildi', 'cancelled', pct); return; }
+    if (is_done) { updateLog(id, 'İletildi', 'success', 100); toast(text + ' gönderildi!', 'success'); }
+    else { updateLog(id, `%${pct}`, '', pct); }
   });
-
-  listen('transfer-id-assigned', (event) => {
-    activeTransferId = event.payload.transfer_id;
-  });
-
-  listen('transfer-initiated', (event) => {
-    const { transfer_id, text, dir } = event.payload;
-    const statusText = dir === 'out' ? 'Onay bekleniyor...' : 'Başlıyor...';
-    addLog(transfer_id, text, dir, statusText);
-    if (dir === 'out') { activeTransferId = transfer_id; }
-  });
-
-  listen('transfer-progress', (event) => {
-    const { id, pct, text, is_done, cancelled, path } = event.payload;
-    if (cancelled) {
-      updateLog(id, 'İptal Edildi', 'cancelled', pct);
-      toast('Alım iptal edildi', 'info');
-      return;
-    }
-    if (is_done) {
-      updateLog(id, 'Tamamlandı', 'done', 100, path);
-      toast(text + ' indirildi!', 'success');
-    } else {
-      updateLog(id, `%${pct}`, '', pct);
-    }
-  });
-
-  listen('transfer-out-progress', (event) => {
-    const { id, pct, text, is_done, cancelled } = event.payload;
-    if (cancelled) {
-      updateLog(id, 'İptal Edildi', 'cancelled', pct);
-      toast('Gönderim iptal edildi', 'info');
-      return;
-    }
-    if (is_done) {
-      updateLog(id, 'İletildi', 'success', 100);
-      toast(text + ' gönderildi!', 'success');
-    } else {
-      updateLog(id, `%${pct}`, '', pct);
-    }
-  });
-
-  listen('peers-updated', (event) => {
-    updateUserList(event.payload);
-  });
-
-  listen('update-available', (event) => {
-    const version = event.payload;
-    showUpdateBanner(version);
-  });
-
-  const acceptBtn = document.getElementById('accept-btn');
-  if(acceptBtn) acceptBtn.addEventListener('click', () => {
-    document.getElementById('incoming-modal').classList.remove('visible');
-    if (currentTransferId) invoke('respond_to_transfer', { id: currentTransferId, accept: true });
-  });
-
-  const declineBtn = document.getElementById('decline-btn');
-  if(declineBtn) declineBtn.addEventListener('click', () => {
-    document.getElementById('incoming-modal').classList.remove('visible');
-    if (currentTransferId) invoke('respond_to_transfer', { id: currentTransferId, accept: false });
-  });
+  listen('peers-updated', (e) => updateUserList(e.payload));
 });
 
-function showUpdateBanner(version) {
-  const existing = document.getElementById('update-banner');
-  if (existing) existing.remove();
+// ─── NAV LOGIC ────────────────────────────────────────────
+function switchView(view) {
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.sidebar-view').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.main-view').forEach(m => m.classList.remove('active'));
 
-  const banner = document.createElement('div');
-  banner.id = 'update-banner';
-  banner.innerHTML = `
-    <span>🚀 <strong>VeriShare v${version}</strong> mevcut!</span>
-    <button onclick="doUpdate()">Hemen Güncelle</button>
-    <button onclick="this.parentElement.remove()" style="background:transparent;border:none;color:inherit;cursor:pointer;margin-left:4px;font-size:16px;">✕</button>
-  `;
-  document.body.appendChild(banner);
+  document.getElementById(`tab-${view}`).classList.add('active');
+  document.getElementById(`${view}-sidebar`).classList.add('active');
+  document.getElementById(`${view}-view`).classList.add('active');
 }
 
-window.doUpdate = async () => {
-  const btn = document.querySelector('#update-banner button');
-  if (btn) {
-    btn.textContent = 'İndiriliyor ve Kuruluyor...';
-    btn.disabled = true;
-  }
+// ─── HUB LOGIC ────────────────────────────────────────────
+async function hubJoin() {
+  const id = document.getElementById('hub-id-input').value.trim();
+  const pass = document.getElementById('hub-pass-input').value.trim();
+  const adminKey = document.getElementById('hub-admin-key').value.trim();
+
+  if(!id || !pass) { toast('Eksik bilgi girdiniz.', 'error'); return; }
+
+  currentHubId = id;
+  isAdmin = adminKey === 'applehub123'; // Sabit veya dinamik admin key
+
+  document.getElementById('hub-auth-container').style.display = 'none';
+  document.getElementById('hub-main-container').style.display = 'flex';
+  document.getElementById('active-hub-id').textContent = id.toUpperCase();
   
+  const badge = document.getElementById('admin-badge');
+  badge.textContent = isAdmin ? 'LİDER' : 'ÜYE';
+  badge.className = `hub-badge ${isAdmin ? 'admin' : ''}`;
+  document.querySelector('.hub-status-text').textContent = `${id} hub oturumu aktif.`;
+
+  startHubPolling();
+  toast('Hub bağlantısı başarılı', 'success');
+}
+
+function startHubPolling() {
+  lastMsgId = 0;
+  document.getElementById('hub-messages').innerHTML = '';
+  hubFetchMessages();
+  hubPollInterval = setInterval(hubFetchMessages, 4000);
+}
+
+async function hubFetchMessages() {
+  if(!currentHubId) return;
   try {
-    await invoke('install_update');
-  } catch(e) {
-    toast('Güncelleme hatası: ' + e, 'error');
-    if (btn) {
-      btn.textContent = 'Hemen Güncelle';
-      btn.disabled = false;
+    const res = await fetch(`${HUB_API_URL}?action=fetch&hub_id=${currentHubId}&last_id=${lastMsgId}`);
+    const data = await res.json();
+    if(data && data.length > 0) {
+      data.forEach(msg => {
+        renderHubMessage(msg);
+        lastMsgId = Math.max(lastMsgId, msg.id);
+      });
+      const list = document.getElementById('hub-messages');
+      list.scrollTop = list.scrollHeight;
+    }
+  } catch(e) { console.error('Hub error:', e); }
+}
+
+function renderHubMessage(msg) {
+  const list = document.getElementById('hub-messages');
+  const isMe = msg.sender_name === myName;
+  const existing = document.getElementById(`hub-msg-${msg.id}`);
+  if(existing) {
+     // Durum güncellemesi kontrolü
+     const tag = existing.querySelector('.status-tag');
+     if(tag && !tag.classList.contains(msg.status)) {
+        tag.className = `status-tag ${msg.status}`;
+        tag.textContent = msg.status.toUpperCase();
+     }
+     return;
+  }
+
+  const div = document.createElement('div');
+  div.className = `hub-message ${isMe ? 'sent' : 'received'}`;
+  div.id = `hub-msg-${msg.id}`;
+
+  let time = msg.created_at.split(' ')[1].slice(0,5);
+  let html = `<div class="hub-msg-meta">${msg.sender_name} • ${time}</div>`;
+  if(msg.message) html += `<div>${msg.message}</div>`;
+  
+  if(msg.file_url) {
+    html += `
+      <a href="${msg.file_url}" target="_blank" class="hub-msg-file">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        <span style="word-break:break-all;">${msg.file_name}</span>
+      </a>
+      <div class="hub-msg-status">
+        <span class="status-tag ${msg.status}">${msg.status.toUpperCase()}</span>
+        ${msg.admin_note ? `<small style="display:block;opacity:0.7;">"${msg.admin_note}"</small>` : ''}
+      </div>
+    `;
+    
+    if(isAdmin && msg.status === 'pending' && !isMe) {
+      html += `
+        <div class="hub-admin-actions">
+          <button class="hub-action-btn approve" onclick="updateHubStatus(${msg.id}, 'approved')">✓ ONAY</button>
+          <button class="hub-action-btn revise" onclick="updateHubStatus(${msg.id}, 'revised')">⚠ REVİZE</button>
+        </div>
+      `;
     }
   }
-};
 
-let currentTransferId = null;
+  div.innerHTML = html;
+  list.appendChild(div);
+}
 
-function showModal(transferId, count, size) {
-  currentTransferId = transferId;
-  const overlay = document.getElementById('incoming-modal');
-  document.getElementById('modal-file-name').textContent = `${count} adet içerik`;
-  document.getElementById('modal-file-meta').textContent = formatSize(size);
-  overlay.classList.add('visible');
+async function hubSendMessage() {
+  const input = document.getElementById('hub-msg-input');
+  const msg = input.value.trim();
+  if(!msg && !pendingHubFile) return;
+
+  const btn = document.getElementById('hub-send-btn');
+  btn.disabled = true;
+
+  const formData = new FormData();
+  formData.append('hub_id', currentHubId);
+  formData.append('sender_name', myName);
+  formData.append('message', msg);
+  if(pendingHubFile) formData.append('file', pendingHubFile);
+
+  try {
+    const res = await fetch(`${HUB_API_URL}?action=send`, { method: 'POST', body: formData });
+    const data = await res.json();
+    if(data.status === 'success') {
+      input.value = '';
+      pendingHubFile = null;
+      document.getElementById('hub-attach-btn').classList.remove('active');
+      hubFetchMessages();
+    }
+  } catch(e) { toast('Gönderim başarısız', 'error'); }
+  btn.disabled = false;
+}
+
+window.updateHubStatus = async (id, status) => {
+  const note = status === 'revised' ? prompt('Revize notu/açıklama:') : '';
+  const formData = new FormData();
+  formData.append('id', id);
+  formData.append('status', status);
+  formData.append('note', note || '');
+
+  try {
+    await fetch(`${HUB_API_URL}?action=update_status`, { method: 'POST', body: formData });
+    hubFetchMessages();
+  } catch(e) { toast('İşlem başarısız', 'error'); }
+}
+
+function hubLogout() {
+  clearInterval(hubPollInterval);
+  currentHubId = null;
+  document.getElementById('hub-auth-container').style.display = 'flex';
+  document.getElementById('hub-main-container').style.display = 'none';
+  document.querySelector('.hub-status-text').textContent = 'Hub oturumu kapalı.';
+  toast('Oturum kapatıldı', 'info');
 }
 
 // ─── LOGIN ────────────────────────────────────────────────
@@ -214,30 +280,21 @@ async function joinNetwork() {
   const name = document.getElementById('name-input').value.trim();
   if (!name) return;
   myName = name;
-  
   try {
     myId = await invoke('start_discovery', { name });
-    
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').classList.add('visible');
     document.getElementById('header-name').textContent = myName;
-
     fetchWifiSSID();
-  } catch(e) {
-    toast('Ağa katılma hatası: ' + e, 'error');
-  }
+  } catch(e) { toast('Ağa katılma hatası: ' + e, 'error'); }
 }
 
 async function fetchWifiSSID() {
   try {
     const ssid = await invoke('get_wifi_ssid');
     const el = document.getElementById('wifi-name');
-    if (ssid && el) {
-      el.textContent = ssid;
-    }
-  } catch(e) {
-    console.log('WiFi SSID alınamadı:', e);
-  }
+    if (ssid && el) el.textContent = ssid;
+  } catch(e) {}
 }
 
 // ─── KULLANICI LİSTESİ ───────────────────────────────────
@@ -247,45 +304,28 @@ function updateUserList(users) {
 }
 
 function renderUserList() {
-  const users = lastUsers;
   const list = document.getElementById('user-list');
   const count = document.getElementById('online-count');
-  
-  const otherUsers = users.filter(u => u.id !== myId);
+  const otherUsers = lastUsers.filter(u => u.id !== myId);
   count.textContent = otherUsers.length;
   list.innerHTML = '';
-
-  const filteredUsers = users.filter(u => 
-    u.name.toLowerCase().includes(searchQuery)
-  );
   
-  filteredUsers.forEach(u => {
+  lastUsers.filter(u => u.name.toLowerCase().includes(searchQuery)).forEach(u => {
     const isSelf = u.id === myId;
     const isSelected = selectedUser && selectedUser.id === u.id;
     const el = document.createElement('div');
     el.className = `user-item${isSelf ? ' self' : ''}${isSelected ? ' selected' : ''}`;
-    
-    const avatar = u.name.slice(0, 2).toUpperCase();
-
     el.innerHTML = `
-      <div class="avatar">${avatar}</div>
+      <div class="avatar">${u.name.slice(0, 2).toUpperCase()}</div>
       <div class="user-info">
         <div class="user-name">${u.name}${isSelf ? ' (sen)' : ''}</div>
         <div class="user-status">● çevrimiçi</div>
       </div>
       ${!isSelf ? '<div class="send-badge">GÖNDER →</div>' : ''}
     `;
-    
     if (!isSelf) el.onclick = () => selectUser(u);
     list.appendChild(el);
   });
-
-  if (selectedUser && !users.find(u => u.id === selectedUser.id)) {
-    const oldName = selectedUser.name;
-    selectedUser = null;
-    showDropUI(false);
-    toast(`${oldName} ağdan ayrıldı`, 'info');
-  }
 }
 
 function selectUser(user) {
@@ -293,11 +333,7 @@ function selectUser(user) {
   document.getElementById('drop-target-name').textContent = user.name + ' cihazına gönder';
   showDropUI(true);
   document.querySelectorAll('.user-item').forEach(el => el.classList.remove('selected'));
-  document.querySelectorAll('.user-item').forEach(el => {
-    if (el.querySelector('.user-name')?.textContent.startsWith(user.name)) {
-      el.classList.add('selected');
-    }
-  });
+  // Basit görsel eşleşme
 }
 
 function showDropUI(show) {
@@ -305,49 +341,24 @@ function showDropUI(show) {
   document.getElementById('drop-target-ui').style.display = show ? 'flex' : 'none';
 }
 
-// ─── LOG ─────────────────────────────────────────────────
 function addLog(transferId, fileName, direction, statusText) {
   if (logItems[transferId]) return;
-
   const list = document.getElementById('log-list');
   logItems[transferId] = transferId;
-  
-  const dirIcon = direction === 'out' 
-    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="17 11 12 6 7 11"/><line x1="12" y1="18" x2="12" y2="6"/></svg>'
-    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="7 13 12 18 17 13"/><line x1="12" y1="6" x2="12" y2="18"/></svg>';
-  
   const dirClass = direction === 'out' ? 'log-dir-out' : 'log-dir-in';
-
   const el = document.createElement('div');
   el.className = 'log-item';
   el.id = 'log-' + transferId;
-  el.dataset.transferId = transferId;
   el.innerHTML = `
-    <div class="log-icon ${dirClass}">${dirIcon}</div>
+    <div class="log-icon ${dirClass}">
+      ${direction==='out'?'↑':'↓'}
+    </div>
     <div class="log-text"><strong>${fileName}</strong></div>
     <div class="log-progress"><div class="log-progress-fill" style="width:0%"></div></div>
     <div class="log-status">${statusText}</div>
-    <div class="log-actions">
-      <button class="log-cancel-btn" title="İptal Et" onclick="cancelTransfer('${transferId}')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-      
-      <button class="log-action-btn" title="Dosyayı Aç" style="display:none;" id="btn-open-${transferId}" onclick="openPath('${transferId}')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-      </button>
-      
-      <button class="log-action-btn" title="Klasörde Göster" style="display:none;" id="btn-folder-${transferId}" onclick="showInFolder('${transferId}')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-      </button>
-
-      <button class="log-delete-btn" title="Listeden Kaldır" style="display:none;" id="btn-del-${transferId}" onclick="removeLogItem('${transferId}')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-      </button>
-    </div>
   `;
   list.prepend(el);
-  logCount = list.children.length;
-  document.getElementById('log-count').textContent = logCount;
+  document.getElementById('log-count').textContent = list.children.length;
 }
 
 function updateLog(transferId, statusText, statusClass, pct, savedPath) {
@@ -355,61 +366,10 @@ function updateLog(transferId, statusText, statusClass, pct, savedPath) {
   if (!el) return;
   const status = el.querySelector('.log-status');
   const fill = el.querySelector('.log-progress-fill');
-  const cancelBtn = el.querySelector('.log-cancel-btn');
-  const btnOpen = el.querySelector('#btn-open-' + transferId);
-  const btnFolder = el.querySelector('#btn-folder-' + transferId);
-  const btnDel = el.querySelector('#btn-del-' + transferId);
-  
-  if (status) { 
-    status.textContent = statusText; 
-    status.className = `log-status ${statusClass || ''}`; 
-  }
-  if (statusClass) el.classList.add(statusClass);
+  if (status) { status.textContent = statusText; status.className = `log-status ${statusClass || ''}`; }
   if (fill && pct !== undefined) fill.style.width = pct + '%';
-  
-  if (statusClass === 'done' || statusClass === 'success' || statusClass === 'cancelled' || statusClass === 'error') {
-    if (cancelBtn) cancelBtn.style.display = 'none';
-    if (btnDel) btnDel.style.display = 'flex';
-  }
-
-  if (statusClass === 'done' && savedPath) {
-    if (btnOpen) btnOpen.style.display = 'flex';
-    if (btnFolder) btnFolder.style.display = 'flex';
-    el.dataset.savedPath = savedPath;
-  }
 }
 
-window.removeLogItem = (transferId) => {
-  const el = document.getElementById('log-' + transferId);
-  if (el) {
-    el.remove();
-    delete logItems[transferId];
-    logCount = document.getElementById('log-list').children.length;
-    document.getElementById('log-count').textContent = logCount;
-  }
-};
-
-window.cancelTransfer = async (transferId) => {
-  try {
-    await invoke('cancel_transfer', { id: transferId });
-    updateLog(transferId, 'İptal Edildi', 'cancelled', undefined);
-    toast('Transfer iptal edildi', 'info');
-  } catch(e) {
-    console.error('İptal hatası:', e);
-  }
-};
-
-window.openPath = async (transferId) => {
-  const el = document.getElementById('log-' + transferId);
-  if(el && el.dataset.savedPath) invoke('open_file', { path: el.dataset.savedPath });
-};
-
-window.showInFolder = async (transferId) => {
-  const el = document.getElementById('log-' + transferId);
-  if(el && el.dataset.savedPath) invoke('show_in_folder', { path: el.dataset.savedPath });
-};
-
-// ─── TOAST ───────────────────────────────────────────────
 function toast(msg, type = 'info') {
   const c = document.getElementById('toast-container');
   const el = document.createElement('div');
@@ -422,6 +382,5 @@ function toast(msg, type = 'info') {
 function formatSize(bytes) {
   if (bytes < 1024) return bytes + ' B';
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }

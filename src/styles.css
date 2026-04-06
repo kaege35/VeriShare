@@ -1084,3 +1084,375 @@ body::after {
   color: var(--muted);
   font-weight: 500;
 }
+/* APPLE STYLE TABS */
+.sidebar-tabs {
+  display: flex;
+  background: rgba(0,0,0,0.05);
+  margin: 12px;
+  padding: 3px;
+  border-radius: 10px;
+}
+
+.nav-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.nav-tab.active {
+  background: var(--surface);
+  color: #007AFF;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.nav-tab svg {
+  opacity: 0.7;
+}
+.nav-tab.active svg {
+  opacity: 1;
+  stroke: #007AFF;
+}
+
+.sidebar-view, .main-view {
+  display: none;
+}
+.sidebar-view.active, .main-view.active {
+  display: flex !important;
+  flex-direction: column;
+}
+#hub-view.active {
+  display: flex;
+  height: 100%;
+}
+
+/* HUB UI - APPLE STYLE */
+.hub-overlay-view {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.hub-login-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--surface);
+  padding: 40px;
+  border-radius: 20px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.04);
+  text-align: center;
+  border: 1px solid rgba(0,0,0,0.05);
+}
+
+.hub-login-icon {
+  margin-bottom: 20px;
+}
+
+.hub-login-card h3 {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.hub-login-card p {
+  color: var(--muted);
+  font-size: 14px;
+  margin-bottom: 30px;
+}
+
+.apple-input-group {
+  text-align: left;
+  margin-bottom: 16px;
+}
+
+.apple-input-group label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 6px;
+  margin-left: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.apple-input-group input {
+  width: 100%;
+  padding: 12px 14px;
+  background: #F5F5F7;
+  border: 1.5px solid transparent;
+  border-radius: 10px;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.apple-input-group input:focus {
+  background: var(--surface);
+  border-color: #007AFF;
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.1);
+}
+
+.apple-primary-btn {
+  width: 100%;
+  padding: 14px;
+  background: #007AFF;
+  color: #fff;
+  border: none;
+  font-weight: 600;
+  font-size: 15px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 10px;
+}
+
+.apple-primary-btn:hover {
+  background: #0062CC;
+  transform: translateY(-1px);
+}
+
+.apple-primary-btn.circular {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+.apple-secondary-btn {
+  padding: 8px 16px;
+  background: rgba(0,0,0,0.05);
+  color: var(--text);
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.apple-secondary-btn:hover {
+  background: rgba(0,0,0,0.08);
+}
+
+.apple-icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.apple-icon-btn:hover {
+  background: rgba(0,0,0,0.05);
+  color: #007AFF;
+}
+
+/* HUB FLOW VIEW */
+.hub-flow-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--surface);
+}
+
+.hub-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+}
+
+.hub-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hub-header h4 {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.hub-badge {
+  font-size: 9px;
+  font-weight: 700;
+  background: rgba(0,0,0,0.06);
+  color: var(--muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.hub-badge.admin {
+  background: rgba(0, 122, 255, 0.1);
+  color: #007AFF;
+}
+
+.hub-message-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.hub-message-list::-webkit-scrollbar {
+  width: 4px;
+}
+.hub-message-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 10px;
+}
+
+.hub-message {
+  max-width: 80%;
+  padding: 12px 16px;
+  border-radius: 18px;
+  font-size: 14px;
+  position: relative;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  border: 1px solid rgba(0,0,0,0.05);
+}
+
+.hub-message.received {
+  align-self: flex-start;
+  background: #F2F2F7;
+  color: var(--text);
+  border-bottom-left-radius: 4px;
+}
+
+.hub-message.sent {
+  align-self: flex-end;
+  background: #007AFF;
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.hub-msg-meta {
+  font-size: 10px;
+  margin-bottom: 4px;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.hub-msg-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 10px;
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.2s;
+}
+.hub-message.received .hub-msg-file {
+  background: rgba(0,0,0,0.03);
+}
+.hub-msg-file:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+.hub-msg-status {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.2);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.hub-message.received .hub-msg-status {
+  border-top-color: rgba(0,0,0,0.05);
+}
+
+.status-tag {
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-size: 9px;
+}
+.status-tag.pending { background: rgba(0,0,0,0.1); }
+.status-tag.approved { background: #34C759; color: #fff; }
+.status-tag.revised { background: #FF9500; color: #fff; }
+
+.hub-admin-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.hub-action-btn {
+  flex: 1;
+  padding: 6px;
+  border: none;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.hub-action-btn.approve { background: #34C759; color: #fff; }
+.hub-action-btn.revise { background: #FF9500; color: #fff; }
+.hub-action-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+
+.hub-input-bar {
+  padding: 16px 24px;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hub-input-wrapper {
+  flex: 1;
+  background: #F2F2F7;
+  border-radius: 20px;
+  padding: 2px 8px;
+}
+
+.hub-input-wrapper input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 10px 12px;
+  font-size: 14px;
+  outline: none;
+}
+
+.hub-sidebar-info {
+  padding: 20px;
+  text-align: center;
+}
+.hub-status-text {
+  font-size: 12px;
+  color: var(--muted);
+}
