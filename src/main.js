@@ -14,6 +14,7 @@ let searchQuery = '';
 // HUB STATE
 const HUB_API_URL = 'https://veritasdijital.tech/onayapp/api.php';
 let currentHubId = null;
+let currentHubPass = '';
 let isAdmin = false;
 let lastMsgId = 0;
 let hubPollInterval = null;
@@ -33,6 +34,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // HUB ACTIONS
   document.getElementById('hub-join-btn').addEventListener('click', hubJoin);
+  document.getElementById('hub-pass-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') hubJoin();
+  });
   document.getElementById('hub-logout-btn').addEventListener('click', hubLogout);
   document.getElementById('hub-send-btn').addEventListener('click', hubSendMessage);
   
@@ -209,7 +213,7 @@ function renderHubMessage(msg) {
   div.className = `hub-message ${isMe ? 'sent' : 'received'}`;
   div.id = `hub-msg-${msg.id}`;
 
-  let time = msg.created_at.split(' ')[1].slice(0,5);
+  let time = msg.created_at?.split(' ')?.[1]?.slice(0,5) ?? '--:--';
   let html = `<div class="hub-msg-meta">${msg.sender_name} • ${time}</div>`;
   if(msg.message) html += `<div>${msg.message}</div>`;
   
