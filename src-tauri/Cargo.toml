@@ -1,6 +1,6 @@
 [package]
 name = "verishare"
-version = "4.2.5"
+version = "5.0.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
