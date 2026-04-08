@@ -1,7 +1,36 @@
-# Tauri + Vanilla
+# VeriShare 🛰️
 
-This template should help get you started developing with Tauri in vanilla HTML, CSS and Javascript.
+VeriShare, kurumsal ağlar ve yerel ağlar üzerindeki kullanıcılar arasında hızlı, güvenli ve sürükle-bırak mantığıyla çalışan bir dosya aktarım ve iletişim platformudur.
 
-## Recommended IDE Setup
+## Özellikler ✨
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+- **Otomatik Keşif:** Aynı ağdaki kullanıcıları anında bulun.
+- **Sürükle-Bırak:** Dosyaları kullanıcıların üzerine bırakarak anında gönderin.
+- **Hızlı Aktarım:** Yerel ağ gücünü kullanarak yüksek hızda veri transferi.
+- **Güvenli:** Kurumsal standartlarda bağlantı ve veri yönetimi.
+- **Otomatik Güncelleme:** En güncel özelliklere anında sahip olun.
+
+## Geliştirme 🛠️
+
+VeriShare, **Tauri**, **Rust** ve **Vanilla JavaScript** teknolojileri kullanılarak geliştirilmiştir.
+
+### Ön Gereksinimler
+- Rust
+- Node.js
+- npm
+
+### Başlatma
+```bash
+npm install
+npm run tauri dev
+```
+
+## Sürüm Notları 📝
+
+### v4.2.4
+- Arayüz metinleri "Ağdaki Kullanıcılar" olarak güncellendi.
+- "VeriShare" markalaması tamamlandı.
+- Otomatik güncelleme stabil hale getirildi.
+
+---
+*Geliştiren: [kaege35](https://github.com/kaege35)*
