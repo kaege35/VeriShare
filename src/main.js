@@ -60,6 +60,47 @@ document.addEventListener("DOMContentLoaded", () => {
     setTimeout(() => btn.classList.remove('spinning'), 1500);
   });
 
+  // ── Manuel IP ile Bağlan ──────────────────────────────────
+  // Kurumsal Wi-Fi'de multicast/broadcast tamamen filtreleniyorsa (AP
+  // client isolation), otomatik keşif hiç çalışmayabilir. Bu durumda
+  // kullanıcı karşı cihazın IP'sini elle girip bir keşif paketi
+  // gönderebilir; karşı taraf bunu alınca bize otomatik yanıt verir ve
+  // birkaç saniye içinde listede belirir.
+  const addPeerByIp = async () => {
+    const input = document.getElementById('manual-ip-input');
+    const ip = input.value.trim();
+    if (!ip) return;
+    try {
+      await invoke('add_peer_by_ip', { ip });
+      toast(`${ip} adresine keşif paketi gönderildi...`, 'info');
+      input.value = '';
+    } catch (e) {
+      toast('Bağlanılamadı: ' + e, 'error');
+    }
+  };
+  document.getElementById('manual-ip-btn').addEventListener('click', addPeerByIp);
+  document.getElementById('manual-ip-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') addPeerByIp();
+  });
+
+  // ── Ayarlar Modalı ───────────────────────────────────────
+  document.getElementById('settings-btn').addEventListener('click', openSettingsModal);
+  document.getElementById('settings-close-btn').addEventListener('click', () => {
+    document.getElementById('settings-modal').classList.remove('visible');
+  });
+  document.getElementById('settings-browse-btn').addEventListener('click', async () => {
+    const { open } = window.__TAURI__.dialog;
+    try {
+      const dir = await open({ directory: true, multiple: false, title: 'İndirme Klasörü Seç' });
+      if (!dir) return;
+      await invoke('set_download_dir', { path: dir });
+      document.getElementById('settings-download-dir').textContent = dir;
+      toast('İndirme klasörü güncellendi.', 'success');
+    } catch (e) {
+      toast('Klasör seçilemedi: ' + e, 'error');
+    }
+  });
+
   // ── Kullanıcı Arama ─────────────────────────────────────
   document.getElementById('user-search').addEventListener('input', (e) => {
     searchQuery = e.target.value.toLowerCase();
@@ -118,33 +159,54 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Alım ilerlemesi
   listen('transfer-progress', (event) => {
-    const { id, pct, text, is_done, cancelled, path } = event.payload;
+    const { id, pct, text, is_done, cancelled, path, speed, error } = event.payload;
+    if (error) {
+      updateLog(id, 'Bağlantı Kesildi', 'error', undefined, null);
+      toast('Aktarım hata nedeniyle kesildi: ' + error, 'error');
+      return;
+    }
     if (cancelled) {
       updateLog(id, 'İptal Edildi', 'cancelled', pct, null);
-      toast('Alım iptal edildi', 'info');
+      toast('Alım iptal edildi (kaldığı yerden devam edebilir)', 'info');
       return;
     }
     if (is_done) {
       updateLog(id, 'Tamamlandı', 'done', 100, path || null);
       toast(`${text} indirildi!`, 'success');
     } else {
-      updateLog(id, `%${pct}`, '', pct, null);
+      updateLog(id, `%${pct}`, '', pct, null, speed);
     }
+  });
+
+  // Bütünlük uyarısı — dosya alındı ama SHA-256 checksum uyuşmadı
+  listen('transfer-integrity-warning', (event) => {
+    const { id, file } = event.payload;
+    updateLog(id, 'Bütünlük Uyarısı', 'warn', undefined, null);
+    toast(`"${file}" için bütünlük doğrulaması başarısız — dosyayı tekrar göndermeyi deneyin.`, 'error');
   });
 
   // Gönderim ilerlemesi
   listen('transfer-out-progress', (event) => {
-    const { id, pct, text, is_done, cancelled } = event.payload;
+    const { id, pct, text, is_done, cancelled, speed } = event.payload;
     if (cancelled) {
       updateLog(id, 'İptal Edildi', 'cancelled', pct, null);
-      toast('Gönderim iptal edildi', 'info');
+      toast('Gönderim iptal edildi (kaldığı yerden devam edebilir)', 'info');
       return;
     }
     if (is_done) {
       updateLog(id, 'İletildi', 'success', 100, null);
       toast(`${text} gönderildi!`, 'success');
     } else {
-      updateLog(id, `%${pct}`, '', pct, null);
+      updateLog(id, `%${pct}`, '', pct, null, speed);
+    }
+  });
+
+  // Kabul isteği zaman aşımına uğradı (60sn yanıt verilmedi) — modal açıksa kapat
+  listen('transfer-request-expired', (event) => {
+    if (currentTransferId === event.payload.id) {
+      document.getElementById('incoming-modal').classList.remove('visible');
+      toast('Gelen istek yanıtsız kaldığı için otomatik reddedildi.', 'info');
+      currentTransferId = null;
     }
   });
 
@@ -194,6 +256,17 @@ window.doUpdate = async () => {
     if (btn) { btn.textContent = 'Hemen Güncelle'; btn.disabled = false; }
   }
 };
+
+// ─── AYARLAR ─────────────────────────────────────────────
+async function openSettingsModal() {
+  try {
+    const settings = await invoke('get_settings');
+    document.getElementById('settings-download-dir').textContent = settings.download_dir;
+  } catch (e) {
+    document.getElementById('settings-download-dir').textContent = 'Okunamadı';
+  }
+  document.getElementById('settings-modal').classList.add('visible');
+}
 
 // ─── MODAL ────────────────────────────────────────────────
 let currentTransferId = null;
@@ -318,7 +391,10 @@ function addLog(transferId, fileName, direction, statusText) {
     <div class="log-icon ${direction === 'out' ? 'log-dir-out' : 'log-dir-in'}">${dirIcon}</div>
     <div class="log-text"><strong>${fileName}</strong></div>
     <div class="log-progress"><div class="log-progress-fill" style="width:0%"></div></div>
-    <div class="log-status">${statusText}</div>
+    <div>
+      <div class="log-status">${statusText}</div>
+      <div class="log-speed" id="log-speed-${transferId}"></div>
+    </div>
     <div class="log-actions">
       <button class="log-cancel-btn" title="İptal Et"
         onclick="cancelTransfer('${transferId}')">
@@ -364,12 +440,14 @@ function addLog(transferId, fileName, direction, statusText) {
  * @param {string}      statusClass   done | success | error | cancelled | ''
  * @param {number}      pct           0‑100
  * @param {string|null} savedPath     İndirilen dosya/klasör yolu (gelen transfer için)
+ * @param {string|null} speedText     "12.4 MB/s" gibi biçimlendirilmiş hız metni
  */
-function updateLog(transferId, statusText, statusClass, pct, savedPath) {
+function updateLog(transferId, statusText, statusClass, pct, savedPath, speedText) {
   const el = document.getElementById(`log-${transferId}`);
   if (!el) return;
 
   const status    = el.querySelector('.log-status');
+  const speedEl   = document.getElementById(`log-speed-${transferId}`);
   const fill      = el.querySelector('.log-progress-fill');
   const cancelBtn = el.querySelector('.log-cancel-btn');
   const btnOpen   = document.getElementById(`btn-open-${transferId}`);
@@ -380,13 +458,20 @@ function updateLog(transferId, statusText, statusClass, pct, savedPath) {
     status.textContent = statusText;
     status.className   = `log-status${statusClass ? ' ' + statusClass : ''}`;
   }
+  if (speedEl) speedEl.textContent = speedText || '';
   if (statusClass) el.classList.add(statusClass);
   if (fill && pct !== undefined) fill.style.width = `${pct}%`;
 
+  // NOT: 'warn' (bütünlük uyarısı) kasıtlı olarak terminal SAYILMIYOR —
+  // bu durum çok dosyalı bir transferin ortasında tek bir dosya için
+  // gelebilir, transfer diğer dosyalarla devam eder. Sadece bir toast ve
+  // geçici durum metni gösterip bir sonraki ilerleme event'i geldiğinde
+  // normal akışa geri döner.
   const isTerminal = ['done', 'success', 'cancelled', 'error'].includes(statusClass);
   if (isTerminal) {
     if (cancelBtn) cancelBtn.style.display = 'none';
     if (btnDel)    btnDel.style.display    = 'flex';
+    if (speedEl) speedEl.textContent = '';
   }
 
   // "Dosyayı Aç" ve "Klasörde Göster" — yalnızca gelen tamamlanmış transferlerde

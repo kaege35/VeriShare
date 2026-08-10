@@ -21,7 +21,7 @@
       <label class="login-label">Kullanıcı Adı</label>
       <input class="login-input" id="name-input" type="text" placeholder="Adınızı giriniz" maxlength="24" autofocus>
       <button class="login-btn" id="join-btn">Oturum Aç</button>
-      <div class="login-version">v5.0.0</div>
+      <div class="login-version">v5.1.0</div>
     </div>
   </div>
 
@@ -34,7 +34,13 @@
           <span id="wifi-name">YEREL AĞ BAĞLI</span>
         </div>
         <div class="my-name" id="header-name"></div>
-        <div class="app-version-badge">v5.0.0</div>
+        <button class="icon-btn" id="settings-btn" title="Ayarlar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+        <div class="app-version-badge">v5.1.0</div>
       </div>
     </header>
 
@@ -58,6 +64,17 @@
           </svg>
         </div>
         <div class="user-list" id="user-list"></div>
+
+        <!-- Manuel IP ile Bağlan: multicast/broadcast'in tamamen engellendiği
+             kurumsal ağlarda (AP client isolation) otomatik keşif işe
+             yaramayabilir — bu durumda karşı cihazın IP'si elle girilebilir. -->
+        <div class="manual-ip-box">
+          <div class="manual-ip-label">Cihaz görünmüyor mu?</div>
+          <div class="manual-ip-row">
+            <input type="text" id="manual-ip-input" placeholder="ör. 192.168.1.42" autocomplete="off">
+            <button id="manual-ip-btn" title="IP ile Bağlan">Ekle</button>
+          </div>
+        </div>
       </aside>
 
       <div class="content">
@@ -127,6 +144,24 @@
       <div class="modal-actions">
         <button class="modal-btn accept" id="accept-btn">Kabul Et</button>
         <button class="modal-btn decline" id="decline-btn">Reddet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ayarlar Modalı -->
+  <div class="modal-overlay" id="settings-modal">
+    <div class="modal settings-modal">
+      <div class="modal-title">⚙️ Ayarlar</div>
+
+      <label class="settings-label">İndirme Klasörü</label>
+      <div class="settings-path-row">
+        <span class="settings-path" id="settings-download-dir">—</span>
+        <button class="settings-browse-btn" id="settings-browse-btn">Değiştir</button>
+      </div>
+      <div class="settings-hint">Gelen dosyalar bu klasöre kaydedilir.</div>
+
+      <div class="modal-actions" style="margin-top: 24px; grid-template-columns: 1fr;">
+        <button class="modal-btn decline" id="settings-close-btn">Kapat</button>
       </div>
     </div>
   </div>

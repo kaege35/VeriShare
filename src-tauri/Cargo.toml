@@ -1,6 +1,6 @@
 [package]
 name = "verishare"
-version = "5.0.0"
+version = "5.1.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -22,7 +22,7 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1.50.0", features = ["net", "time", "rt", "rt-multi-thread", "macros", "fs", "io-util"] }
+tokio = { version = "1.50.0", features = ["net", "time", "rt", "rt-multi-thread", "macros", "fs", "io-util", "sync"] }
 uuid = { version = "1.23.0", features = ["v4"] }
 local-ip-address = "0.6.11"
 tauri-plugin-dialog = "2.6.0"
@@ -32,4 +32,18 @@ walkdir = "2.5.0"
 tauri-plugin-updater = "2.10.0"
 lazy_static = "1.5.0"
 tauri-plugin-single-instance = "2.4.0"
+
+# Uçtan uca şifreleme: her TCP bağlantısında geçici (ephemeral) X25519 anahtar
+# değişimi yapılıp AES-256-GCM ile oturum anahtarı türetiliyor (bkz. crypto.rs).
+# Böylece aynı ağdaki üçüncü bir cihaz trafiği dinleyip dosya içeriğini okuyamaz.
+x25519-dalek = "2"
+aes-gcm = "0.10"
+rand = "0.8"
+# tokio::net::UdpSocket, setsockopt seviyesindeki bazı gelişmiş multicast
+# seçeneklerini (ör. IP_MULTICAST_IF) inherent metod olarak sunmuyor.
+# socket2::SockRef, sahiplik almadan (referansla) altındaki fd/handle
+# üzerinden bu seçeneklere erişim sağlıyor — bkz. discovery.rs.
+socket2 = "0.5"
+# Dosya bütünlüğü doğrulaması (SHA-256) — bkz. transfer.rs FileChecksum
+sha2 = "0.10"
 

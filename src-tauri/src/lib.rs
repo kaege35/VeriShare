@@ -4,7 +4,9 @@ use tauri::Manager;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
+mod crypto;
 mod discovery;
+mod settings;
 mod transfer;
 
 #[tauri::command]
@@ -26,6 +28,30 @@ async fn start_discovery(app: AppHandle, name: String) -> Result<String, String>
 async fn scan_network() -> Result<(), String> {
     discovery::force_announce().await;
     Ok(())
+}
+
+// Kurumsal Wi-Fi'de multicast/broadcast tamamen engellenmişse (AP client
+// isolation), kullanıcı karşı tarafın IP adresini elle girip doğrudan bir
+// keşif paketi gönderebilir. Bkz. discovery::probe_peer_ip.
+#[tauri::command]
+async fn add_peer_by_ip(ip: String) -> Result<(), String> {
+    discovery::probe_peer_ip(ip).await
+}
+
+#[derive(serde::Serialize)]
+struct SettingsPayload {
+    download_dir: String,
+}
+
+#[tauri::command]
+async fn get_settings() -> Result<SettingsPayload, String> {
+    let dir = settings::current_download_dir().await;
+    Ok(SettingsPayload { download_dir: dir.to_string_lossy().into_owned() })
+}
+
+#[tauri::command]
+async fn set_download_dir(path: String) -> Result<(), String> {
+    settings::set_download_dir(std::path::PathBuf::from(path)).await
 }
 
 #[tauri::command]
@@ -62,11 +88,30 @@ async fn cancel_transfer(id: String) -> Result<(), String> {
 async fn get_wifi_ssid() -> Result<String, String> {
     #[cfg(target_os = "macos")]
     {
-        // YENİ: macOS Sonoma (14) ve sonrasında Apple, "Konum Servisleri" izni yetkisi 
-        // olmayan uygulamalara terminal üzerinden de Wi-Fi adını okutmayı engelledi.
-        // system_profiler gibi komutlar 10 saniye boyunca sistemi dondurup yine de 
-        // veri alamadığı için Mac tarafında bu sorguları pas geçip default değeri veriyoruz.
-        Err("Apple Gizlilik Koruması".to_string())
+        // macOS Sonoma (14) ve sonrasında Apple, "Konum Servisleri" izni
+        // olmayan uygulamalara Wi-Fi adını okutmayı kısıtlıyor.
+        // system_profiler 10 saniye boyunca sistemi dondurduğu için onu
+        // KULLANMIYORUZ. Bunun yerine `networksetup -getairportnetwork`
+        // deniyoruz — çoğu sistemde konum izni istemeden anında yanıt verir;
+        // izin/donanım kısıtlaması varsa yine de zarifçe hataya düşüp
+        // frontend'de sessizce yok sayılır (fetchWifiSSID zaten try/catch'li).
+        let output = tokio::task::spawn_blocking(|| {
+            std::process::Command::new("networksetup")
+                .args(["-getairportnetwork", "en0"])
+                .output()
+        }).await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
+
+        let text = String::from_utf8_lossy(&output.stdout).to_string();
+        // Beklenen çıktı: "Current Wi-Fi Network: AğAdı"
+        if let Some((_, name)) = text.trim().rsplit_once(": ") {
+            let name = name.trim();
+            if !name.is_empty() {
+                return Ok(name.to_string());
+            }
+        }
+        Err("Apple Gizlilik Koruması ya da Wi-Fi kapalı".to_string())
     }
     #[cfg(target_os = "windows")]
     {
@@ -150,6 +195,9 @@ pub fn run() {
             install_update,
             get_wifi_ssid,
             scan_network,
+            add_peer_by_ip,
+            get_settings,
+            set_download_dir,
             open_file,
             show_in_folder
         ])
@@ -189,9 +237,12 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // TCP Transfer Sunucusunu başlat
+            // Kayıtlı ayarları (ör. özel indirme klasörü) yükle, sonra TCP
+            // Transfer Sunucusunu başlat — sıralama önemli, sunucu save_dir'i
+            // her bağlantıda ayarlardan okuyor.
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
+                settings::load().await;
                 if let Err(e) = transfer::start_transfer_server(handle).await {
                     println!("Transfer server başlatılamadı: {}", e);
                 }
