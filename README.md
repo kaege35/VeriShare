@@ -27,7 +27,15 @@ npm run tauri dev
 
 ## Sürüm Notları 📝
 
-### v5.1.0 — Ajans içi güvenlik ve güvenilirlik güncellemesi
+### v6.1.0 — Ajans içi güvenlik ve güvenilirlik güncellemesi
+> **Sürüm numarası notu:** Bu güncelleme önce `v5.1.0` olarak etiketlenmişti,
+> ama `v5.1.0`–`v5.2.5` ve `v6.0.0` arası tag'ler geçmişte (Nisan ayında,
+> artık `main`'de olmayan "Design Hub" özelliği döneminde) zaten kullanılmıştı
+> — aynı tag'i tekrar kullanmak GitHub Release'inde eski/yeni dosyaların
+> karışmasına (asset adı çakışması) yol açtı ve auto-update'in eski Hub'lı
+> build'i dağıtmasına neden oldu. Çakışmayı kesin çözmek için hiç kullanılmamış
+> `v6.1.0`'a atlandı. **Yeni bir sürüm çıkarırken önce `git tag -l` ile
+> çakışma kontrolü yapılmalı.**
 - **Uçtan uca şifreleme:** her transfer bağlantısında geçici X25519 anahtar
   değişimi + AES-256-GCM. Aynı ağdaki üçüncü bir cihaz artık trafiği dinleyip
   dosya içeriğini okuyamaz. (Not: kalıcı bir kimlik doğrulaması yok — sadece
