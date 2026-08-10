@@ -27,6 +27,11 @@ npm run tauri dev
 
 ## Sürüm Notları 📝
 
+### v6.1.1 — Auto-update zinciri doğrulama
+- İçerik değişikliği yok. v6.1.0 çalıştıran cihazların otomatik güncellemeyi
+  doğru şekilde alıp almadığını doğrulamak için yayınlanan test sürümü
+  (bkz. v6.1.0'a geçişteki tag çakışması sorunu).
+
 ### v6.1.0 — Ajans içi güvenlik ve güvenilirlik güncellemesi
 > **Sürüm numarası notu:** Bu güncelleme önce `v5.1.0` olarak etiketlenmişti,
 > ama `v5.1.0`–`v5.2.5` ve `v6.0.0` arası tag'ler geçmişte (Nisan ayında,
