@@ -12,16 +12,10 @@ mod transfer;
 #[tauri::command]
 async fn start_discovery(app: AppHandle, name: String) -> Result<String, String> {
     println!("Ağ cihaz keşfi başlatılıyor... Kullanıcı adı: {}", name);
-    let id = uuid::Uuid::new_v4().to_string();
-    let tcp_port = transfer::TRANSFER_PORT;
-
-    // Self ID'yi sakla
-    discovery::set_self_id(id.clone()).await;
-
-    match discovery::start_discovery_loop(app, id.clone(), name, tcp_port).await {
-        Ok(_) => Ok(id), // Self ID'yi frontend'e döndür
-        Err(e) => Err(format!("Keşif modülü başlatılamadı: {}", e))
-    }
+    // İlk çağrıda keşif supervisor'ını başlatır; sonraki çağrılarda adı günceller
+    // ve AYNI kimliği döndürür (eskiden her çağrı yeni bir UUID üretip arayüzün
+    // "kendim" kimliğini gerçek yayın kimliğinden koparabiliyordu).
+    discovery::ensure_started(app, name, transfer::TRANSFER_PORT).await
 }
 
 #[tauri::command]
@@ -32,10 +26,33 @@ async fn scan_network() -> Result<(), String> {
 
 // Kurumsal Wi-Fi'de multicast/broadcast tamamen engellenmişse (AP client
 // isolation), kullanıcı karşı tarafın IP adresini elle girip doğrudan bir
-// keşif paketi gönderebilir. Bkz. discovery::probe_peer_ip.
+// keşif paketi gönderebilir. Bkz. discovery::pin_peer_ip.
 #[tauri::command]
 async fn add_peer_by_ip(ip: String) -> Result<(), String> {
-    discovery::probe_peer_ip(ip).await
+    // Adresi sabitler (heartbeat her tick'te gider) ve ayarlara kaydeder —
+    // uygulama yeniden açılınca da hatırlanır.
+    let parsed = discovery::pin_peer_ip(ip).await?;
+    settings::add_pinned_ip(parsed.to_string()).await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_discovery_diagnostics() -> Result<discovery::DiagnosticsReport, String> {
+    Ok(discovery::diagnostics())
+}
+
+// Keşif soketini baştan kurdurur (Ağ Tanılama panelindeki "Bağlantıyı Sıfırla").
+#[tauri::command]
+async fn reset_discovery() -> Result<(), String> {
+    discovery::request_reset();
+    Ok(())
+}
+
+#[tauri::command]
+async fn clear_pinned_ips() -> Result<(), String> {
+    discovery::clear_pinned();
+    settings::clear_pinned_ips().await;
+    Ok(())
 }
 
 #[derive(serde::Serialize)]
@@ -196,6 +213,9 @@ pub fn run() {
             get_wifi_ssid,
             scan_network,
             add_peer_by_ip,
+            get_discovery_diagnostics,
+            reset_discovery,
+            clear_pinned_ips,
             get_settings,
             set_download_dir,
             open_file,

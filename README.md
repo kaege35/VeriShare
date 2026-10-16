@@ -27,6 +27,46 @@ npm run tauri dev
 
 ## Sürüm Notları 📝
 
+### v6.2.0 — Keşif güvenilirliği (cihaz görünmeme / giriş yapamama düzeltmeleri)
+Sahada görülen iki sorunun kök nedenleri bulunup giderildi: (1) cihazların
+zaman zaman listede görünmemesi, interneti kapatıp açınca düzelmesi; (2) bir
+kullanıcının hiçbir şekilde ağa girememesi / kimseyi görememesi.
+
+**Kök nedenler**
+- `DISCOVERY_RUNNING` bayrağı soket bağlanmadan ÖNCE set ediliyordu. UDP 53317
+  açılamazsa (LocalSend gibi bir uygulama, ya da Windows'ta Hyper-V/WSL/Docker'ın
+  rezerve ettiği port aralığı) bayrak sonsuza dek true kalıyor, sonraki denemeler
+  "zaten çalışıyor" deyip hiçbir şey başlatmıyordu.
+- Multicast üyeliği yalnızca açılışta kuruluyordu; Wi-Fi/VPN/kablo değişince ya da
+  uyku sonrası kernel üyeliği düşürüyor, uygulama bunu fark etmiyordu.
+- Peer ömrü 8 sn'ydi; Wi-Fi'da çoklu yayın paketleri güç tasarrufu yüzünden sık
+  kayboluyor, cihazlar yanıp sönüyordu. Yayın yalnızca genel 255.255.255.255'e
+  gidiyordu (çoklu arayüzlü makinelerde yanlış arayüzden çıkabilir).
+- Çoklu yayın/broadcast'i filtreleyen ama cihazlar arası unicast'e izin veren
+  kurumsal Wi-Fi'larda hiçbir yedek yol yoktu. TCP bağlantısı zaman aşımsızdı.
+
+**Çözümler**
+- Tek bir "supervisor" keşif motoru: arayüz kümesi değişince, sistem uykudan
+  dönünce, uzun süre paket gelmeyince ya da alım hatası sürünce soketi otomatik
+  baştan kurar. Bind hatası girişi engellemez; arka planda yeniden dener.
+- SO_REUSEADDR/SO_REUSEPORT + standart port kullanılamazsa yedek (rastgele) port.
+- Her arayüzden multicast + o arayüzün yönlendirilmiş broadcast'i + bilinen
+  cihazlara doğrudan unicast heartbeat. Peer ömrü 20 sn.
+- Otomatik alt ağ taraması (çoklu yayın engelli ağlar için): yeni bağlantıda,
+  hiç cihaz yokken her 30 sn'de ve "Ağı Tara"da.
+- Peer'ın duyurduğu IP'ler arasından BİZİM alt ağımızdaki seçilir (VPN/sanal
+  adaptör IP'sine gönderme sorunu).
+- "Manuel IP ile Bağlan" artık kalıcı: sabitlenen IP'ye sürekli heartbeat gider,
+  uygulama yeniden açılınca hatırlanır.
+- Başlıkta tıklanabilir durum noktası + **Ağ Tanılama** paneli: bind hatası,
+  arayüzler, paket sayaçları, güvenlik duvarı/izolasyon ipuçları, "Bağlantıyı
+  Sıfırla", sonucu kopyalama.
+- Dosya alma (TCP) servisi bind hatasında artık yeniden denenir; gönderimde
+  bağlantı (5 sn) ve el sıkışma (10 sn) zaman aşımı, anlaşılır hata mesajı.
+- Ağ geri gelince / pencere öne gelince arayüz kendiliğinden yeniden tarar.
+- Protokol uyumluluğu korundu: v6.1.x ile v6.2.0 birbirini görür ve dosya
+  gönderir (yeni `ips` alanı eski sürümlerce yok sayılır).
+
 ### v6.1.1 — Auto-update zinciri doğrulama
 - İçerik değişikliği yok. v6.1.0 çalıştıran cihazların otomatik güncellemeyi
   doğru şekilde alıp almadığını doğrulamak için yayınlanan test sürümü

@@ -1,6 +1,6 @@
 [package]
 name = "verishare"
-version = "6.1.1"
+version = "6.2.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -43,7 +43,14 @@ rand = "0.8"
 # seçeneklerini (ör. IP_MULTICAST_IF) inherent metod olarak sunmuyor.
 # socket2::SockRef, sahiplik almadan (referansla) altındaki fd/handle
 # üzerinden bu seçeneklere erişim sağlıyor — bkz. discovery.rs.
-socket2 = "0.5"
+#
+# "all" özelliği: SO_REUSEPORT (set_reuse_port) için gerekli — keşif soketi,
+# eski nesil tam kapanmadan ya da aynı portu paylaşan başka bir uygulama (ör.
+# LocalSend) varken bile bind edebilsin diye.
+socket2 = { version = "0.5", features = ["all"] }
+# Ağ arayüzlerinin IP + ALT AĞ MASKESİ bilgisi: her arayüzün kendi
+# yönlendirilmiş broadcast adresine yayın yapmak ve alt ağ taraması için.
+if-addrs = "0.13"
 # Dosya bütünlüğü doğrulaması (SHA-256) — bkz. transfer.rs FileChecksum
 sha2 = "0.10"
 

@@ -83,6 +83,55 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.key === 'Enter') addPeerByIp();
   });
 
+  // ── Ağ Tanılama ──────────────────────────────────────────
+  document.getElementById('status-chip').addEventListener('click', openDiagModal);
+  document.getElementById('diag-close-btn').addEventListener('click', () => {
+    document.getElementById('diag-modal').classList.remove('visible');
+  });
+  document.getElementById('diag-refresh-btn').addEventListener('click', refreshDiag);
+  document.getElementById('diag-reset-btn').addEventListener('click', async () => {
+    try {
+      await invoke('reset_discovery');
+      toast('Bağlantı sıfırlanıyor...', 'info');
+      setTimeout(refreshDiag, 2500);
+    } catch (e) {
+      toast('Sıfırlanamadı: ' + e, 'error');
+    }
+  });
+  document.getElementById('diag-clear-pins-btn').addEventListener('click', async () => {
+    try {
+      await invoke('clear_pinned_ips');
+      toast('Sabit IP listesi temizlendi.', 'success');
+      refreshDiag();
+    } catch (e) {
+      toast('Temizlenemedi: ' + e, 'error');
+    }
+  });
+  document.getElementById('diag-copy-btn').addEventListener('click', async () => {
+    const text = document.getElementById('diag-summary').textContent + '\n\n' +
+      document.getElementById('diag-details').textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Tanılama bilgisi kopyalandı.', 'success');
+    } catch {
+      toast('Kopyalanamadı — metni elle seçip kopyalayın.', 'error');
+    }
+  });
+
+  // Keşif durumu değişince (ok / degraded / error) başlıktaki noktayı güncelle
+  listen('discovery-status', (event) => applyDiscoveryStatus(event.payload));
+
+  // Ağ değişimi / uyku sonrası uygulama öne gelince hemen yeniden tara.
+  // ("İnterneti kapatıp açınca düzeliyor" şikayetinin arayüz tarafı: artık
+  // kullanıcının elle bir şey yapmasına gerek kalmadan kendi toparlıyor.)
+  const softRescan = () => {
+    if (myId) invoke('scan_network').catch(() => {});
+  };
+  window.addEventListener('online', softRescan);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) softRescan();
+  });
+
   // ── Ayarlar Modalı ───────────────────────────────────────
   document.getElementById('settings-btn').addEventListener('click', openSettingsModal);
   document.getElementById('settings-close-btn').addEventListener('click', () => {
@@ -257,6 +306,64 @@ window.doUpdate = async () => {
   }
 };
 
+// ─── AĞ TANILAMA ─────────────────────────────────────────
+function applyDiscoveryStatus({ state, summary }) {
+  const dot = document.getElementById('status-dot-indicator');
+  const txt = document.getElementById('discovery-status-text');
+  if (!dot || !txt) return;
+  dot.classList.remove('warn', 'error');
+  txt.classList.remove('error');
+  if (state === 'degraded') dot.classList.add('warn');
+  if (state === 'error') { dot.classList.add('error'); txt.classList.add('error'); }
+  txt.textContent = state === 'ok' ? '' : `· ${summary}`;
+}
+
+async function openDiagModal() {
+  document.getElementById('diag-modal').classList.add('visible');
+  await refreshDiag();
+}
+
+function fmtBool(v) { return v ? 'evet' : 'hayır'; }
+
+async function refreshDiag() {
+  const summaryEl = document.getElementById('diag-summary');
+  const hintsEl = document.getElementById('diag-hints');
+  const detailsEl = document.getElementById('diag-details');
+  try {
+    const r = await invoke('get_discovery_diagnostics');
+    summaryEl.textContent = r.summary;
+    summaryEl.className = `diag-summary ${r.state === 'ok' ? 'ok' : r.state === 'degraded' ? 'warn' : 'error'}`;
+
+    hintsEl.innerHTML = '';
+    r.hints.forEach((h) => {
+      const li = document.createElement('li');
+      li.textContent = h;
+      hintsEl.appendChild(li);
+    });
+
+    const lines = [
+      `Durum: ${r.state}`,
+      `Keşif portu: UDP ${r.bind_port || '—'} (standart ${r.discovery_port}) · yedek port modu: ${fmtBool(r.fallback_port_mode)}`,
+      r.fallback_reason ? `Yedek port nedeni: ${r.fallback_reason}` : null,
+      r.bind_error ? `Bağlanma hatası: ${r.bind_error}` : null,
+      `Ağ arayüzleri: ${r.interfaces.length ? r.interfaces.join(' | ') : '—'}`,
+      `Çoklu yayın katılımı: ${r.joined_multicast.length ? r.joined_multicast.join(' | ') : '—'}`,
+      `Paketler → gönderilen: ${r.packets_sent} · kendi yayınımız: ${r.self_packets} · diğer cihazlardan: ${r.peer_packets} · alım hatası: ${r.recv_errors}`,
+      `Son cihaz paketi: ${r.last_peer_packet_secs_ago === null ? 'hiç' : r.last_peer_packet_secs_ago + ' sn önce'}`,
+      `Bilinen cihaz: ${r.peers_known} · sabit IP: ${r.pinned_ips.length ? r.pinned_ips.join(', ') : '—'}`,
+      `Yeniden bağlanma: ${r.resets} kez${r.last_reset_reason ? ` (son sebep: ${r.last_reset_reason})` : ''} · alt ağ taraması: ${r.sweeps} kez`,
+      `Bağlantı yaşı: ${r.generation_age_secs} sn`,
+      `Dosya alma servisi (TCP ${r.transfer_port}): ${r.transfer_server_ok ? 'çalışıyor' : 'ÇALIŞMIYOR'}${r.transfer_server_error ? ' — ' + r.transfer_server_error : ''}`,
+    ].filter(Boolean);
+    detailsEl.textContent = lines.join('\n');
+  } catch (e) {
+    summaryEl.textContent = 'Tanılama okunamadı';
+    summaryEl.className = 'diag-summary error';
+    hintsEl.innerHTML = '';
+    detailsEl.textContent = String(e);
+  }
+}
+
 // ─── AYARLAR ─────────────────────────────────────────────
 async function openSettingsModal() {
   try {
@@ -341,12 +448,19 @@ function renderUserList() {
     list.appendChild(el);
   });
 
-  // Seçili kullanıcı ağdan çıktıysa temizle
-  if (selectedUser && !lastUsers.find(u => u.id === selectedUser.id)) {
-    const name = selectedUser.name;
-    selectedUser = null;
-    showDropUI(false);
-    toast(`${name} ağdan ayrıldı`, 'info');
+  // Seçili kullanıcı ağdan çıktıysa temizle; hâlâ varsa kaydını TAZELE —
+  // IP'si değişmiş olabilir (ör. Wi-Fi değişimi); eski nesne bayat IP'ye
+  // gönderim denemesine yol açıyordu.
+  if (selectedUser) {
+    const fresh = lastUsers.find(u => u.id === selectedUser.id);
+    if (fresh) {
+      selectedUser = fresh;
+    } else {
+      const name = selectedUser.name;
+      selectedUser = null;
+      showDropUI(false);
+      toast(`${name} ağdan ayrıldı`, 'info');
+    }
   }
 }
 

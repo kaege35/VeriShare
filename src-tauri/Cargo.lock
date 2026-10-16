@@ -1954,6 +1954,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "if-addrs"
+version = "0.13.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69b2eeee38fef3aa9b4cc5f1beea8a2444fc00e7377cafae396de3f5c2065e24"
+dependencies = [
+ "libc",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5119,10 +5129,11 @@ dependencies = [
 
 [[package]]
 name = "verishare"
-version = "5.1.0"
+version = "6.2.0"
 dependencies = [
  "aes-gcm",
  "dirs",
+ "if-addrs",
  "lazy_static",
  "local-ip-address",
  "rand 0.8.5",

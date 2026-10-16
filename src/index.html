@@ -21,7 +21,7 @@
       <label class="login-label">Kullanıcı Adı</label>
       <input class="login-input" id="name-input" type="text" placeholder="Adınızı giriniz" maxlength="24" autofocus>
       <button class="login-btn" id="join-btn">Oturum Aç</button>
-      <div class="login-version">v6.1.1</div>
+      <div class="login-version">v6.2.0</div>
     </div>
   </div>
 
@@ -29,9 +29,10 @@
     <header class="header">
       <img src="verishare.svg" class="header-logo" alt="VeriShare" data-tauri-drag-region draggable="false" />
       <div class="header-meta">
-        <div class="status-dot">
-          <div class="dot"></div>
+        <div class="status-dot status-clickable" id="status-chip" title="Ağ durumu — Ağ Tanılama için tıklayın">
+          <div class="dot" id="status-dot-indicator"></div>
           <span id="wifi-name">YEREL AĞ BAĞLI</span>
+          <span id="discovery-status-text" class="discovery-status-text"></span>
         </div>
         <div class="my-name" id="header-name"></div>
         <button class="icon-btn" id="settings-btn" title="Ayarlar">
@@ -40,7 +41,7 @@
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
         </button>
-        <div class="app-version-badge">v6.1.1</div>
+        <div class="app-version-badge">v6.2.0</div>
       </div>
     </header>
 
@@ -162,6 +163,27 @@
 
       <div class="modal-actions" style="margin-top: 24px; grid-template-columns: 1fr;">
         <button class="modal-btn decline" id="settings-close-btn">Kapat</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ağ Tanılama Modalı: cihazlar görünmediğinde NEDENİ gösterir (bind hatası,
+       güvenlik duvarı/izolasyon ipuçları, paket sayaçları) ve tek tıkla
+       bağlantıyı sıfırlatır. "Kopyala" ile destek için paylaşılabilir. -->
+  <div class="modal-overlay" id="diag-modal">
+    <div class="modal diag-modal">
+      <div class="modal-title">🩺 Ağ Tanılama</div>
+      <div class="diag-summary" id="diag-summary">Yükleniyor...</div>
+      <ul class="diag-hints" id="diag-hints"></ul>
+      <pre class="diag-details" id="diag-details"></pre>
+      <div class="diag-actions">
+        <button class="diag-btn" id="diag-refresh-btn">Yenile</button>
+        <button class="diag-btn primary" id="diag-reset-btn">Bağlantıyı Sıfırla</button>
+        <button class="diag-btn" id="diag-clear-pins-btn">Sabit IP'leri Temizle</button>
+        <button class="diag-btn" id="diag-copy-btn">Kopyala</button>
+      </div>
+      <div class="modal-actions" style="margin-top: 16px; grid-template-columns: 1fr;">
+        <button class="modal-btn decline" id="diag-close-btn">Kapat</button>
       </div>
     </div>
   </div>

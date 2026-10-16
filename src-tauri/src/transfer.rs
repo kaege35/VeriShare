@@ -89,51 +89,77 @@ async fn remove_cancel_token(id: &str) {
     CANCEL_TOKENS.lock().await.remove(id);
 }
 
-pub async fn start_transfer_server(app: AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], TRANSFER_PORT))).await?;
+/// Tek bir gelen bağlantıyı işler; hata olursa son bilinen transfer için arayüze
+/// "kesildi" bildirir. Ayrı bir fonksiyon: `Box<dyn std::error::Error>` Send değil —
+/// hatayı `match` kolunun İÇİNDE hemen String'e indirip bırakıyoruz ki sonraki
+/// `.await` noktalarına sızmasın (aksi halde spawn edilen future Send olmaz).
+async fn serve_connection(socket: TcpStream, app: AppHandle) {
+    // Hata durumunda son bilinen transfer id'sini frontend'e bildirebilmek için
+    // paylaşımlı bir tutucu — eskiden hatalar sadece konsola basılıyor, arayüzdeki
+    // log satırı sonsuza dek "%xx" durumunda asılı kalıyordu.
+    let last_id: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+
+    let err_msg: Option<String> =
+        match handle_incoming(socket, app.clone(), last_id.clone()).await {
+            Ok(()) => None,
+            Err(e) => Some(e.to_string()),
+        };
+
+    if let Some(err_msg) = err_msg {
+        println!("TCP Hata: {}", err_msg);
+        let last_id_val = last_id.lock().await.clone();
+        if let Some(id) = last_id_val {
+            let _ = app.emit("transfer-progress", serde_json::json!({
+                "id": id,
+                "pct": 0,
+                "text": "",
+                "is_done": false,
+                "error": err_msg
+            }));
+        }
+    }
+}
+
+/// TCP dosya alma sunucusu. Eskiden bind bir kez deneniyor, başarısız olursa
+/// (port meşgul / güvenlik duvarı) yalnızca konsola yazılıp bir daha
+/// denenmiyordu — kullanıcı "keşif çalışıyor ama dosya alamıyorum" durumunda
+/// kalıyordu. Artık sürekli denenir, durum Ağ Tanılama panelinde görünür.
+pub async fn start_transfer_server(app: AppHandle) -> Result<(), String> {
     tokio::spawn(async move {
         loop {
-            if let Ok((socket, _)) = listener.accept().await {
-                let app_c = app.clone();
-                tokio::spawn(async move {
-                    // Hata durumunda son bilinen transfer id'sini frontend'e
-                    // "başarısız/kesildi" olarak bildirebilmek için paylaşımlı
-                    // bir tutucu kullanıyoruz — eskiden hatalar sadece konsola
-                    // basılıyordu ve arayüzdeki log satırı sonsuza dek
-                    // "%xx" durumunda asılı kalıyordu.
-                    let last_id: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-
-                    // NOT: `Box<dyn std::error::Error>` (`e`) Send DEĞİL.
-                    // Önceki denemede `e.to_string()`'i bir `if let Err(e) =`
-                    // bloğunun İÇİNDE, sonrasında başka bir `.await` olacak
-                    // şekilde çağırmak yetmedi — async state machine, `e`
-                    // bağlamının (drop sırası nedeniyle) blok sonuna kadar
-                    // "canlı" sayıldığını düşünüyor, NLL bunu kısaltmıyor.
-                    // Kesin çözüm: `e`'yi yalnızca `match` kolunun İÇİNDE,
-                    // hiçbir `.await` içermeyen dar bir ifadede kullanıp
-                    // hemen `String`'e indirgemek — böylece `e`'nin
-                    // ömrü match kolunun kendisiyle birlikte biter ve
-                    // sonraki `.await`'lere hiç sızmaz.
-                    let err_msg: Option<String> =
-                        match handle_incoming(socket, app_c.clone(), last_id.clone()).await {
-                            Ok(()) => None,
-                            Err(e) => Some(e.to_string()),
-                        };
-
-                    if let Some(err_msg) = err_msg {
-                        println!("TCP Hata: {}", err_msg);
-                        let last_id_val = last_id.lock().await.clone();
-                        if let Some(id) = last_id_val {
-                            let _ = app_c.emit("transfer-progress", serde_json::json!({
-                                "id": id,
-                                "pct": 0,
-                                "text": "",
-                                "is_done": false,
-                                "error": err_msg
-                            }));
+            match TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], TRANSFER_PORT))).await {
+                Ok(listener) => {
+                    crate::discovery::set_transfer_status(true, None);
+                    let mut consecutive_errors: u32 = 0;
+                    loop {
+                        match listener.accept().await {
+                            Ok((socket, _)) => {
+                                consecutive_errors = 0;
+                                let app_c = app.clone();
+                                tokio::spawn(async move {
+                                    serve_connection(socket, app_c).await;
+                                });
+                            }
+                            Err(e) => {
+                                consecutive_errors += 1;
+                                println!("TCP accept hatası: {}", e);
+                                tokio::time::sleep(Duration::from_millis(200)).await;
+                                if consecutive_errors >= 50 {
+                                    break; // dinleyici bozulmuş — yeniden bind
+                                }
+                            }
                         }
                     }
-                });
+                    crate::discovery::set_transfer_status(
+                        false,
+                        Some("kabul döngüsü bozuldu, yeniden başlatılıyor".to_string()),
+                    );
+                }
+                Err(e) => {
+                    println!("Transfer sunucusu başlatılamadı: {} — 5 sn sonra yeniden denenecek", e);
+                    crate::discovery::set_transfer_status(false, Some(e.to_string()));
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                }
             }
         }
     });
@@ -207,7 +233,18 @@ async fn handle_incoming(
     last_id: Arc<Mutex<Option<String>>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _ = socket.set_nodelay(true);
-    let mut secure = SecureStream::handshake_responder(socket).await?;
+    // El sıkışmaya zaman aşımı: yarım kalan/port tarayan bir bağlantı sonsuza
+    // dek bir task ve soket tutmasın.
+    let mut secure = match tokio::time::timeout(
+        Duration::from_secs(10),
+        SecureStream::handshake_responder(socket),
+    )
+    .await
+    {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => return Err(e.into()),
+        Err(_) => return Err("El sıkışma zaman aşımına uğradı (10 sn).".into()),
+    };
     let save_dir = settings::current_download_dir().await;
 
     let mut active_cancel: Option<Arc<tokio::sync::Notify>> = None;
@@ -483,9 +520,42 @@ async fn handle_incoming(
 
 // ─── GİDEN TRANSFER ────────────────────────────────────────────────────────
 pub async fn send_items(peer_ip: &str, paths: Vec<PathBuf>, app: AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let stream = TcpStream::connect(format!("{}:{}", peer_ip, TRANSFER_PORT)).await?;
+    // Bağlantıya zaman aşımı: eskiden, ağdan ayrılmış/eski bir IP'ye gönderirken
+    // işletim sisteminin varsayılan zaman aşımı (bazen dakikalar) boyunca
+    // "Onay bekleniyor..." durumunda asılı kalınıyordu.
+    let stream = match tokio::time::timeout(
+        Duration::from_secs(5),
+        TcpStream::connect(format!("{}:{}", peer_ip, TRANSFER_PORT)),
+    )
+    .await
+    {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => {
+            return Err(format!(
+                "Karşı cihaza ({}) bağlanılamadı: {}. Cihaz ağdan ayrılmış ya da kapalı olabilir, veya güvenlik duvarı gelen bağlantıyı engelliyor.",
+                peer_ip, e
+            )
+            .into())
+        }
+        Err(_) => {
+            return Err(format!(
+                "Karşı cihaza ({}) bağlanılamadı: 5 sn içinde yanıt yok. Cihaz ağdan ayrılmış olabilir ('Ağı Tara' deneyin) ya da güvenlik duvarı bağlantıyı engelliyor.",
+                peer_ip
+            )
+            .into())
+        }
+    };
     let _ = stream.set_nodelay(true);
-    let mut secure = SecureStream::handshake_initiator(stream).await?;
+    let mut secure = match tokio::time::timeout(
+        Duration::from_secs(10),
+        SecureStream::handshake_initiator(stream),
+    )
+    .await
+    {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => return Err(e.into()),
+        Err(_) => return Err("Şifreli el sıkışma zaman aşımına uğradı (10 sn).".into()),
+    };
 
     // Tüm dosyaları tara ve toplam boyutu hesapla
     let mut all_files: Vec<(String, PathBuf)> = Vec::new();
